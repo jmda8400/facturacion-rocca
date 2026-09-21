@@ -26,6 +26,59 @@ La creación responde `202` con `id`, `status_url` y eventualmente `download_url
 
 ## Instalación
 
+### Opción recomendada: Docker Compose
+
+El contenedor incluye Nginx, PHP-FPM, las extensiones de PHP requeridas, el worker y el scheduler. MariaDB se ejecuta en un contenedor separado y tanto la base como certificados, TA y facturas se guardan en volúmenes persistentes.
+
+```bash
+cd facturacion-server
+cp .env.example .env
+# Edite .env. Puede generar secretos, por ejemplo, con:
+openssl rand -base64 32 # APP_KEY debe llevar el prefijo "base64:"
+openssl rand -hex 32    # BILLING_API_KEYS, SETTINGS_PASSWORD y contraseñas de DB
+docker compose up -d --build
+docker compose ps
+curl --fail http://127.0.0.1:8080/up
+```
+
+El puerto se publica sólo en `127.0.0.1:8080` para colocarlo detrás del reverse proxy TLS del servidor. Se puede cambiar con `HTTP_PORT` al ejecutar Compose. El arranque valida las variables sensibles, prepara los directorios, cachea la configuración y aplica migraciones antes de iniciar Nginx, PHP-FPM, la cola y el scheduler.
+
+Ejemplo mínimo de proxy Nginx en el host (Certbot puede administrar el certificado):
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name facturacion.refugioagostinorocca.com;
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://127.0.0.1:8080;
+    }
+}
+```
+
+Después del primer arranque, ingresar a `/settings` y cargar cada certificado y clave ARCA. Para actualizar: obtener el código nuevo y ejecutar `docker compose up -d --build`. Antes de una actualización, respaldar ambos volúmenes:
+
+```bash
+docker compose exec -T db mariadb-dump -u"$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE" > facturacion.sql
+docker run --rm -v facturacion-server_private_storage:/data -v "$PWD":/backup alpine tar czf /backup/private-storage.tgz -C /data .
+```
+
+Verificación y diagnóstico:
+
+```bash
+docker compose logs -f app
+docker compose exec app php artisan about
+docker compose exec app php artisan queue:failed
+docker compose exec app php artisan schedule:list
+```
+
+No exponga el puerto de MariaDB ni monte `storage/app/private` en un servidor web. Conserve copias cifradas de la base y del volumen privado fuera del servidor.
+
+### Instalación tradicional
+
 1. Copiar `.env.example` a `.env`, generar `APP_KEY` y crear claves API aleatorias de al menos 32 caracteres. Cambiar especialmente la contraseña inicial de `/settings` antes de exponer el sitio.
 2. Configurar base de datos y SMTP en `.env`.
 3. Ejecutar `composer install --no-dev --optimize-autoloader`, `php artisan key:generate`, `php artisan migrate --force` y dar permisos de escritura al usuario PHP sobre `storage` y `bootstrap/cache`.
