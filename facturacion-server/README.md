@@ -87,7 +87,7 @@ No exponga el puerto de MariaDB ni monte `storage/app/private` en un servidor we
 6. Mantener un worker con Supervisor/systemd: `php artisan queue:work --sleep=3 --tries=5 --timeout=120`.
 7. Agregar al cron: `* * * * * cd /ruta/facturacion-server && php artisan schedule:run >> /dev/null 2>&1`.
 
-Los certificados y private keys quedan en `storage/app/private/arca/<perfil>` (ignorados por Git). Nunca debe servirse `storage/app/private`; conservar un backup cifrado externo. El scheduler revisa los perfiles cada 30 minutos y el servicio también renueva el TA bajo demanda antes de vencer, usando un TA separado por perfil.
+Los certificados y private keys quedan en `storage/app/private/arca/<perfil>` (ignorados por Git). Nunca debe servirse `storage/app/private`; conservar un backup cifrado externo. El scheduler renueva los TA de los puntos de venta cada 6 horas y el servicio también los renueva bajo demanda antes de vencer, usando un TA separado por punto.
 
 ## Integración y operación
 
