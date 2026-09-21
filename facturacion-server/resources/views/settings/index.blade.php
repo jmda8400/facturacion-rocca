@@ -1,1 +1,103 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Configuración · Facturación Rocca</title><style>body{font-family:system-ui;margin:0;background:#f1f4f2;color:#17231d}header{background:#174c33;color:white;padding:1rem 5%;display:flex;justify-content:space-between}main{max-width:1100px;margin:2rem auto;padding:0 1rem}.card{background:white;padding:1.5rem;border-radius:12px;margin-bottom:1.5rem;box-shadow:0 3px 15px #0001}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}label{font-weight:650}input{display:block;width:100%;box-sizing:border-box;padding:.65rem;margin-top:.3rem;border:1px solid #bdc9c1;border-radius:6px}button{padding:.65rem 1rem;border:0;border-radius:6px;background:#195b3a;color:white}.danger{background:#a22}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #ddd}.ok{background:#dff5e7;padding:.7rem;border-radius:6px}.hint{color:#52645a;font-size:.9rem}</style></head><body><header><strong>Facturación Rocca</strong><form method="post" action="{{ route('settings.logout') }}">@csrf<button>Salir</button></form></header><main>@if(session('status'))<p class="ok">{{ session('status') }}</p>@endif<div class="card"><h1>Perfiles ARCA</h1><p class="hint">Cada consumidor de la API puede indicar un perfil diferente. Certificado, clave privada y TA se guardan fuera del directorio público y nunca se muestran ni descargan desde este panel.</p><div style="overflow:auto"><table><thead><tr><th>Perfil</th><th>CUIT</th><th>Punto de venta</th><th>Estado</th><th></th></tr></thead><tbody>@forelse($profiles as $profile)<tr><td><strong>{{ $profile->name }}</strong><br><code>{{ $profile->slug }}</code></td><td>{{ $profile->cuit }}</td><td>{{ $profile->sales_point }}</td><td>{{ $profile->active ? 'Activo' : 'Inactivo' }}</td><td><form method="post" action="{{ route('settings.profiles.destroy',$profile) }}" onsubmit="return confirm('¿Eliminar perfil?')">@csrf @method('DELETE')<button class="danger">Eliminar</button></form></td></tr>@empty<tr><td colspan="5">Todavía no hay perfiles.</td></tr>@endforelse</tbody></table></div></div><div class="card"><h2>Agregar perfil</h2>@if($errors->any())<div class="error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif<form method="post" enctype="multipart/form-data" action="{{ route('settings.profiles.store') }}">@csrf<div class="grid"><label>Identificador<input name="slug" placeholder="rocca" required></label><label>Nombre<input name="name" required></label><label>CUIT<input name="cuit" inputmode="numeric" required></label><label>Punto de venta<input type="number" name="sales_point" min="1" required></label><label>Razón social<input name="business_name" required></label><label>Domicilio<input name="address" required></label><label>Condición IVA<input name="vat_condition" value="IVA Responsable Inscripto" required></label><label>Ingresos brutos<input name="gross_income"></label><label>Inicio de actividades<input type="date" name="activity_started_at"></label><label>Certificado (.crt)<input type="file" name="certificate" required></label><label>Clave privada (.key)<input type="file" name="private_key" required></label></div><p class="hint">Los archivos admiten hasta 100 KB. El proceso PHP debe poder escribir en <code>storage/app/private/arca</code>.</p><button>Guardar perfil</button></form></div><div class="card"><h2>Estado operativo</h2><p>SMTP: <strong>{{ config('mail.default') }}</strong> · Cola: <strong>{{ config('queue.default') }}</strong> · Entorno ARCA: <strong>{{ config('billing.arca.environment') }}</strong></p><p class="hint">Ejecutar permanentemente <code>php artisan queue:work</code> y cada minuto <code>php artisan schedule:run</code>.</p></div></main></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Puntos de Venta · Refugio Rocca</title>
+    <style>
+        :root { --ink:#18332d; --pine:#244b40; --pine-dark:#17362e; --cream:#f5f1e7; --paper:#fffdf8; --gold:#c89c55; --muted:#738079; --line:#dedbd0; --danger:#9b433b; }
+        * { box-sizing:border-box; }
+        body { margin:0; min-height:100vh; color:var(--ink); background:var(--cream); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+        button { font:inherit; }
+        .topbar { height:76px; padding:0 clamp(1.25rem,5vw,5rem); display:flex; align-items:center; justify-content:space-between; color:#fff; background:var(--pine-dark); border-bottom:3px solid var(--gold); }
+        .brand { display:flex; align-items:center; gap:.85rem; letter-spacing:.04em; text-transform:uppercase; }
+        .brand-mark { width:42px; height:42px; display:grid; place-items:center; border:1px solid #ffffff55; border-radius:50%; color:var(--gold); font-size:1.15rem; }
+        .brand strong { display:block; font-family:Georgia,serif; font-size:1rem; letter-spacing:.08em; }
+        .brand small { display:block; margin-top:.12rem; color:#dbe5df; font-size:.62rem; letter-spacing:.18em; }
+        .logout { padding:.6rem 1rem; color:#fff; background:transparent; border:1px solid #ffffff66; border-radius:999px; cursor:pointer; transition:.2s; }
+        .logout:hover { color:var(--pine-dark); background:#fff; }
+        .shell { width:min(1180px,calc(100% - 2rem)); margin:0 auto; padding:clamp(2rem,5vw,4.5rem) 0; }
+        .eyebrow { margin:0 0 .65rem; color:#9a7133; font-size:.73rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; }
+        h1 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:clamp(2.25rem,5vw,4.2rem); font-weight:400; line-height:1; }
+        .lead { max-width:630px; margin:1rem 0 0; color:var(--muted); font-size:1.02rem; line-height:1.65; }
+        .notice { margin:1.5rem 0 0; padding:1rem 1.15rem; color:#1f563e; background:#e1efe5; border-left:3px solid #5b9572; border-radius:4px; }
+        .section-head { margin:3.2rem 0 1.15rem; display:flex; align-items:end; justify-content:space-between; gap:1rem; }
+        .section-head h2 { margin:0; font-family:Georgia,serif; font-size:1.55rem; font-weight:400; }
+        .section-head span { color:var(--muted); font-size:.85rem; }
+        .points { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:1rem; }
+        .point { position:relative; min-height:245px; padding:1.55rem; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:4px; box-shadow:0 12px 30px rgba(32,49,42,.06); }
+        .point::before { content:""; position:absolute; inset:0 auto 0 0; width:4px; background:var(--gold); }
+        .point-top { display:flex; justify-content:space-between; gap:1rem; }
+        .point h3 { margin:.3rem 0 .2rem; font-family:Georgia,serif; font-size:1.45rem; font-weight:400; }
+        .identifier { color:var(--muted); font-size:.78rem; }
+        .status { height:fit-content; display:inline-flex; align-items:center; gap:.4rem; padding:.38rem .65rem; border-radius:999px; color:#2f6c4e; background:#e4f0e7; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+        .status::before { content:""; width:7px; height:7px; border-radius:50%; background:#4d986b; }
+        .status.off { color:#7c615f; background:#eee7e4; }
+        .status.off::before { background:#a5746f; }
+        .renewal { margin:1.7rem 0 1.5rem; padding-top:1.25rem; border-top:1px solid var(--line); }
+        .renewal-label { color:var(--muted); font-size:.74rem; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+        .countdown { margin-top:.38rem; color:var(--pine); font-family:Georgia,serif; font-size:2rem; font-variant-numeric:tabular-nums; }
+        .renewal small { display:block; margin-top:.35rem; color:var(--muted); }
+        .delete { padding:.48rem .7rem; color:var(--danger); background:transparent; border:0; cursor:pointer; font-weight:700; }
+        .delete:hover { text-decoration:underline; }
+        .empty { grid-column:1/-1; padding:3.5rem 1.5rem; text-align:center; color:var(--muted); background:#fffaf1; border:1px dashed #cfc7b6; }
+        .empty strong { display:block; margin-bottom:.4rem; color:var(--ink); font-family:Georgia,serif; font-size:1.35rem; font-weight:400; }
+        .operations { margin-top:1rem; padding:1.25rem 1.5rem; display:flex; flex-wrap:wrap; justify-content:space-between; gap:1rem; color:#d9e3de; background:var(--pine); border-radius:4px; }
+        .operations strong { color:#fff; }
+        .operations p { margin:0; }
+        .operations .technical { color:#b9c9c1; font-size:.78rem; }
+        @media (max-width:600px) { .brand small{display:none}.topbar{height:68px}.shell{padding-top:2.5rem}.section-head{align-items:start;flex-direction:column}.operations{flex-direction:column}.point{min-height:225px} }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div class="brand"><span class="brand-mark">▲</span><span><strong>Refugio Rocca</strong><small>Facturación</small></span></div>
+    <form method="post" action="{{ route('settings.logout') }}">@csrf<button class="logout">Cerrar sesión</button></form>
+</header>
+<main class="shell">
+    <p class="eyebrow">Panel de facturación</p>
+    <h1>Puntos de Venta</h1>
+    <p class="lead">Estado de las credenciales y de los tickets de acceso utilizados para emitir comprobantes.</p>
+    @if(session('status'))<div class="notice" role="status">{{ session('status') }}</div>@endif
+
+    <div class="section-head"><h2>Puntos conectados</h2><span>{{ $profiles->count() }} {{ $profiles->count() === 1 ? 'punto registrado' : 'puntos registrados' }}</span></div>
+    <section class="points" aria-label="Puntos de venta">
+        @forelse($profiles as $profile)
+            <article class="point">
+                <div class="point-top">
+                    <div><span class="eyebrow">Punto de venta</span><h3>{{ $profile->slug }}</h3><span class="identifier">ID #{{ str_pad((string) $profile->id, 3, '0', STR_PAD_LEFT) }}</span></div>
+                    <span class="status {{ $profile->active ? '' : 'off' }}">{{ $profile->active ? 'Activo' : 'Inactivo' }}</span>
+                </div>
+                <div class="renewal">
+                    <div class="renewal-label">Próxima renovación del TA</div>
+                    <div class="countdown" data-next-renewal="{{ $profile->next_renewal_at?->toIso8601String() }}">--:--:--</div>
+                    <small>{{ $profile->last_renewal_at ? 'Última renovación '.$profile->last_renewal_at->diffForHumans() : 'Se renovará en la próxima ejecución' }}</small>
+                </div>
+                <form method="post" action="{{ route('settings.profiles.destroy', $profile) }}" onsubmit="return confirm('¿Eliminar este punto de venta?')">@csrf @method('DELETE')<button class="delete">Eliminar punto</button></form>
+            </article>
+        @empty
+            <div class="empty"><strong>No hay puntos de venta registrados</strong>Los puntos configurados aparecerán aquí junto con el estado de su próximo TA.</div>
+        @endforelse
+    </section>
+    <section class="operations"><p>Renovación automática: <strong>cada 6 horas</strong></p><p class="technical">SMTP: {{ config('mail.default') }} · Cola: {{ config('queue.default') }} · ARCA: {{ config('billing.arca.environment') }}</p></section>
+</main>
+<script>
+    const clocks = document.querySelectorAll('[data-next-renewal]');
+    function updateClocks() {
+        clocks.forEach((clock) => {
+            const target = Date.parse(clock.dataset.nextRenewal);
+            if (!target) { clock.textContent = 'Pendiente'; return; }
+            const remaining = Math.max(0, target - Date.now());
+            if (remaining === 0) { clock.textContent = 'Renovando…'; return; }
+            const hours = Math.floor(remaining / 3600000);
+            const minutes = Math.floor((remaining % 3600000) / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+            clock.textContent = [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+        });
+    }
+    updateClocks();
+    setInterval(updateClocks, 1000);
+</script>
+</body>
+</html>

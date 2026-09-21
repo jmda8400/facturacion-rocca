@@ -2,4 +2,4 @@
 
 use Illuminate\Support\Facades\Schedule;
 
-Schedule::command('arca:renew-tickets')->everyThirtyMinutes()->withoutOverlapping()->onOneServer()->appendOutputTo(storage_path('logs/arca.log'));
+Schedule::command('arca:renew-tickets')->everySixHours()->withoutOverlapping()->onOneServer()->appendOutputTo(storage_path('logs/arca.log'));

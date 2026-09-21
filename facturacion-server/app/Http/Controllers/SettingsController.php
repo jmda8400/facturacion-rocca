@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ArcaProfile;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -11,7 +12,17 @@ class SettingsController
 {
     public function index()
     {
-        return view('settings.index', ['profiles' => ArcaProfile::latest()->get()]);
+        $profiles = ArcaProfile::latest()->get()->each(function (ArcaProfile $profile) {
+            $profile->last_renewal_at = null;
+            $profile->next_renewal_at = null;
+
+            if ($profile->ta_path && Storage::exists($profile->ta_path)) {
+                $profile->last_renewal_at = CarbonImmutable::createFromTimestamp(Storage::lastModified($profile->ta_path));
+                $profile->next_renewal_at = $profile->last_renewal_at->addHours(6);
+            }
+        });
+
+        return view('settings.index', compact('profiles'));
     }
 
     public function store(Request $r)
