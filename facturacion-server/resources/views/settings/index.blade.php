@@ -9,7 +9,7 @@
         :root { --ink:#18332d; --pine:#244b40; --pine-dark:#17362e; --cream:#f5f1e7; --paper:#fffdf8; --gold:#c89c55; --muted:#738079; --line:#dedbd0; --danger:#9b433b; }
         * { box-sizing:border-box; }
         body { margin:0; min-height:100vh; color:var(--ink); background:var(--cream); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-        button { font:inherit; }
+        button, input { font:inherit; }
         .topbar { height:76px; padding:0 clamp(1.25rem,5vw,5rem); display:flex; align-items:center; justify-content:space-between; color:#fff; background:var(--pine-dark); border-bottom:3px solid var(--gold); }
         .brand { display:flex; align-items:center; gap:.85rem; letter-spacing:.04em; text-transform:uppercase; }
         .brand-mark { width:42px; height:42px; display:grid; place-items:center; border:1px solid #ffffff55; border-radius:50%; color:var(--gold); font-size:1.15rem; }
@@ -22,6 +22,18 @@
         h1 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:clamp(2.25rem,5vw,4.2rem); font-weight:400; line-height:1; }
         .lead { max-width:630px; margin:1rem 0 0; color:var(--muted); font-size:1.02rem; line-height:1.65; }
         .notice { margin:1.5rem 0 0; padding:1rem 1.15rem; color:#1f563e; background:#e1efe5; border-left:3px solid #5b9572; border-radius:4px; }
+        .errors { margin:1.5rem 0 0; padding:1rem 1.15rem; color:#7d312b; background:#f7e5e2; border-left:3px solid var(--danger); border-radius:4px; }
+        .errors ul { margin:.35rem 0 0; padding-left:1.2rem; }
+        .register { margin-top:2rem; padding:1.5rem; background:var(--paper); border:1px solid var(--line); border-radius:4px; box-shadow:0 12px 30px rgba(32,49,42,.06); }
+        .register-head { display:flex; align-items:start; justify-content:space-between; gap:1rem; }
+        .register h2 { margin:0; font-family:Georgia,serif; font-size:1.55rem; font-weight:400; }
+        .register p { margin:.4rem 0 0; color:var(--muted); font-size:.9rem; }
+        .register-grid { margin-top:1.3rem; display:grid; grid-template-columns:1.25fr 1fr 1fr auto; align-items:end; gap:1rem; }
+        .field span { display:block; margin-bottom:.45rem; color:var(--pine); font-size:.76rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+        .field input { width:100%; min-height:44px; padding:.65rem .75rem; color:var(--ink); background:#fff; border:1px solid #bfc6bf; border-radius:3px; }
+        .field input:focus { outline:2px solid #c89c5570; border-color:var(--gold); }
+        .submit { min-height:44px; padding:.65rem 1.15rem; color:#fff; background:var(--pine); border:0; border-radius:3px; cursor:pointer; font-weight:750; white-space:nowrap; }
+        .submit:hover { background:var(--pine-dark); }
         .section-head { margin:3.2rem 0 1.15rem; display:flex; align-items:end; justify-content:space-between; gap:1rem; }
         .section-head h2 { margin:0; font-family:Georgia,serif; font-size:1.55rem; font-weight:400; }
         .section-head span { color:var(--muted); font-size:.85rem; }
@@ -47,7 +59,8 @@
         .operations strong { color:#fff; }
         .operations p { margin:0; }
         .operations .technical { color:#b9c9c1; font-size:.78rem; }
-        @media (max-width:600px) { .brand small{display:none}.topbar{height:68px}.shell{padding-top:2.5rem}.section-head{align-items:start;flex-direction:column}.operations{flex-direction:column}.point{min-height:225px} }
+        @media (max-width:900px) { .register-grid{grid-template-columns:1fr 1fr}.submit{width:100%} }
+        @media (max-width:600px) { .brand small{display:none}.topbar{height:68px}.shell{padding-top:2.5rem}.section-head,.register-head{align-items:start;flex-direction:column}.register-grid{grid-template-columns:1fr}.operations{flex-direction:column}.point{min-height:225px} }
     </style>
 </head>
 <body>
@@ -60,13 +73,29 @@
     <h1>Puntos de Venta</h1>
     <p class="lead">Estado de las credenciales y de los tickets de acceso utilizados para emitir comprobantes.</p>
     @if(session('status'))<div class="notice" role="status">{{ session('status') }}</div>@endif
+    @if($errors->any())
+        <div class="errors" role="alert"><strong>No se pudo registrar el punto de venta.</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
+    @endif
+
+    <section class="register" aria-labelledby="register-title">
+        <div class="register-head"><div><h2 id="register-title">Registrar punto de venta</h2><p>Ingresá un nombre y cargá las credenciales provistas por ARCA.</p></div></div>
+        <form method="post" enctype="multipart/form-data" action="{{ route('settings.profiles.store') }}">
+            @csrf
+            <div class="register-grid">
+                <label class="field"><span>Nombre</span><input name="name" value="{{ old('name') }}" maxlength="100" autocomplete="off" required></label>
+                <label class="field"><span>Certificado (.crt)</span><input type="file" name="certificate" accept=".crt" required></label>
+                <label class="field"><span>Clave privada (.key)</span><input type="file" name="private_key" accept=".key" required></label>
+                <button class="submit" type="submit">Registrar punto</button>
+            </div>
+        </form>
+    </section>
 
     <div class="section-head"><h2>Puntos conectados</h2><span>{{ $profiles->count() }} {{ $profiles->count() === 1 ? 'punto registrado' : 'puntos registrados' }}</span></div>
     <section class="points" aria-label="Puntos de venta">
         @forelse($profiles as $profile)
             <article class="point">
                 <div class="point-top">
-                    <div><span class="eyebrow">Punto de venta</span><h3>{{ $profile->slug }}</h3><span class="identifier">ID #{{ str_pad((string) $profile->id, 3, '0', STR_PAD_LEFT) }}</span></div>
+                    <div><span class="eyebrow">Punto de venta</span><h3>{{ $profile->name }}</h3><span class="identifier">{{ $profile->slug }} · ID #{{ str_pad((string) $profile->id, 3, '0', STR_PAD_LEFT) }}</span></div>
                     <span class="status {{ $profile->active ? '' : 'off' }}">{{ $profile->active ? 'Activo' : 'Inactivo' }}</span>
                 </div>
                 <div class="renewal">

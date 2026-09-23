@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ArcaProfile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -50,9 +51,49 @@ class AuthenticationTest extends TestCase
             ->get('/settings')
             ->assertOk()
             ->assertSee('Puntos de Venta')
+            ->assertSee('Registrar punto de venta')
+            ->assertSee('name="certificate"', false)
+            ->assertSee('name="private_key"', false)
             ->assertSee('Próxima renovación del TA')
             ->assertSee('data-next-renewal=', false)
             ->assertDontSee('Cada consumidor de la API')
             ->assertDontSee('Razón social');
+    }
+
+    public function test_settings_can_register_a_point_of_sale_with_only_its_credentials(): void
+    {
+        Storage::fake();
+
+        $this->withSession(['settings_authenticated' => true])
+            ->post('/settings/profiles', [
+                'name' => 'Refugio Rocca',
+                'certificate' => UploadedFile::fake()->create('rocca.crt', 10),
+                'private_key' => UploadedFile::fake()->create('rocca.key', 10),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Punto de venta registrado.');
+
+        $profile = ArcaProfile::firstOrFail();
+        $this->assertSame('Refugio Rocca', $profile->name);
+        $this->assertSame('refugio-rocca', $profile->slug);
+        Storage::assertExists('arca/refugio-rocca/certificate.crt');
+        Storage::assertExists('arca/refugio-rocca/private.key');
+    }
+
+    public function test_point_of_sale_credentials_require_crt_and_key_extensions(): void
+    {
+        Storage::fake();
+
+        $this->withSession(['settings_authenticated' => true])
+            ->from('/settings')
+            ->post('/settings/profiles', [
+                'name' => 'Refugio Rocca',
+                'certificate' => UploadedFile::fake()->create('rocca.txt', 10),
+                'private_key' => UploadedFile::fake()->create('rocca.pem', 10),
+            ])
+            ->assertRedirect('/settings')
+            ->assertSessionHasErrors(['certificate', 'private_key']);
+
+        $this->assertDatabaseCount('arca_profiles', 0);
     }
 }
