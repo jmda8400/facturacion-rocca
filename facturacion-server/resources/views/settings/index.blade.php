@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#17362e">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Puntos de Venta · Refugio Rocca</title>
     <style>
@@ -59,13 +60,14 @@
         .operations strong { color:#fff; }
         .operations p { margin:0; }
         .operations .technical { color:#b9c9c1; font-size:.78rem; }
+        @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
         @media (max-width:900px) { .register-grid{grid-template-columns:1fr 1fr}.submit{width:100%} }
         @media (max-width:600px) { .brand small{display:none}.topbar{height:68px}.shell{padding-top:2.5rem}.section-head,.register-head{align-items:start;flex-direction:column}.register-grid{grid-template-columns:1fr}.operations{flex-direction:column}.point{min-height:225px} }
     </style>
 </head>
 <body>
 <header class="topbar">
-    <div class="brand"><span class="brand-mark">▲</span><span><strong>Refugio Rocca</strong><small>Facturación</small></span></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true">▲</span><span><strong>Refugio Rocca</strong><small>Facturación</small></span></div>
     <form method="post" action="{{ route('settings.logout') }}">@csrf<button class="logout">Cerrar sesión</button></form>
 </header>
 <main class="shell">
