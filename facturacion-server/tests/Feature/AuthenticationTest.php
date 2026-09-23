@@ -24,6 +24,20 @@ class AuthenticationTest extends TestCase
         $this->get('/settings')->assertOk();
     }
 
+    public function test_login_and_settings_share_the_service_visual_identity(): void
+    {
+        $sharedElements = ['Refugio Agostino Rocca', 'Panel de facturación', 'Administración de servicios'];
+
+        foreach ($sharedElements as $element) {
+            $this->get('/settings/login')->assertOk()->assertSee($element);
+            $this->withSession(['settings_authenticated' => true])->get('/settings')->assertOk()->assertSee($element);
+        }
+
+        $this->get('/settings/login')
+            ->assertSee('--brand:#f28c28', false)
+            ->assertSee('--header:#212529', false);
+    }
+
     public function test_api_rejects_missing_key(): void
     {
         config(['billing.api_keys' => ['secret']]);

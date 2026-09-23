@@ -1,1 +1,34 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acceso · Facturación Rocca</title><style>body{font-family:system-ui;background:#eef2f0;margin:0;display:grid;place-items:center;min-height:100vh;color:#17231d}.card{background:white;padding:2rem;border-radius:14px;box-shadow:0 12px 35px #14352422;width:min(360px,calc(100% - 3rem))}h1{font-size:1.35rem}label{display:block;margin-top:1rem;font-weight:650}input{width:100%;box-sizing:border-box;padding:.75rem;border:1px solid #bac6bf;border-radius:7px;margin-top:.35rem}button{width:100%;margin-top:1.5rem;padding:.8rem;border:0;border-radius:7px;background:#195b3a;color:white;font-weight:700}.error{color:#a21919}</style></head><body><main class="card"><h1>Facturación Refugio Rocca</h1><p>Ingresá para administrar las credenciales ARCA.</p>@if($errors->any())<p class="error">{{ $errors->first() }}</p>@endif<form method="post" action="{{ url('/settings/login') }}">@csrf<label>Usuario<input name="username" autocomplete="username" required autofocus></label><label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label><button>Ingresar</button></form></main></body></html>
+@extends('layouts.settings')
+
+@section('title', 'Acceso')
+
+@section('styles')
+    .login-page { display:grid; place-items:center; }
+    .login-panel { width:min(100%,420px); }
+    .login-panel .panel__header { padding:1.25rem 1.5rem; }
+    .login-panel .panel__body { padding:1.5rem; }
+    .login-panel .field + .field { margin-top:1rem; }
+    .login-panel .button-primary { width:100%; margin-top:1.4rem; }
+    .login-help { margin:1rem 0 0; color:var(--muted); font-size:.82rem; text-align:center; }
+@endsection
+
+@section('content')
+<main class="page login-page">
+    <section class="panel login-panel" aria-labelledby="login-title">
+        <div class="panel__header">
+            <h1 class="page-title" id="login-title">Iniciar sesión</h1>
+            <p>Ingresá para administrar las credenciales de ARCA.</p>
+        </div>
+        <div class="panel__body">
+            @if($errors->any())<div class="alert alert--danger" role="alert">{{ $errors->first() }}</div>@endif
+            <form method="post" action="{{ url('/settings/login') }}">
+                @csrf
+                <label class="field"><span>Usuario</span><input name="username" autocomplete="username" required autofocus></label>
+                <label class="field"><span>Contraseña</span><input type="password" name="password" autocomplete="current-password" required></label>
+                <button class="button-primary" type="submit">Ingresar</button>
+            </form>
+            <p class="login-help">Acceso exclusivo para personal autorizado.</p>
+        </div>
+    </section>
+</main>
+@endsection
