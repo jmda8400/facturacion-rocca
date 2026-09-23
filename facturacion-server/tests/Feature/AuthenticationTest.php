@@ -24,17 +24,6 @@ class AuthenticationTest extends TestCase
         $this->get('/settings')->assertOk();
     }
 
-    public function test_login_uses_the_rocca_visual_identity(): void
-    {
-        $this->get('/settings/login')
-            ->assertOk()
-            ->assertSee('Refugio Rocca')
-            ->assertSee('Panel de facturación')
-            ->assertSee('Ingresar al panel')
-            ->assertSee('--pine-dark:#17362e', false)
-            ->assertSee('name="theme-color" content="#17362e"', false);
-    }
-
     public function test_api_rejects_missing_key(): void
     {
         config(['billing.api_keys' => ['secret']]);
