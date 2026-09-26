@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-required="APP_KEY APP_URL BILLING_API_KEYS SETTINGS_PASSWORD DB_HOST DB_DATABASE DB_USERNAME DB_PASSWORD"
+required="APP_KEY APP_URL SETTINGS_PASSWORD DB_HOST DB_DATABASE DB_USERNAME DB_PASSWORD"
 for variable in $required; do
     eval "value=\${$variable:-}"
     if [ -z "$value" ]; then

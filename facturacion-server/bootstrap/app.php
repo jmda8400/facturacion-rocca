@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Middleware\AuthenticateApiKey;
+use App\Http\Middleware\AuthenticateBillingToken;
 use App\Http\Middleware\AuthenticateSettings;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -10,5 +10,5 @@ return Application::configure(basePath: dirname(__DIR__))->withRouting(web: __DI
     // The container is only exposed through the host reverse proxy. Trust its
     // forwarded scheme/host so generated API URLs remain HTTPS in production.
     $middleware->trustProxies(at: '*');
-    $middleware->alias(['billing.api' => AuthenticateApiKey::class, 'settings.auth' => AuthenticateSettings::class]);
+    $middleware->alias(['billing.token' => AuthenticateBillingToken::class, 'settings.auth' => AuthenticateSettings::class]);
 })->withExceptions(fn (Exceptions $exceptions) => null)->create();

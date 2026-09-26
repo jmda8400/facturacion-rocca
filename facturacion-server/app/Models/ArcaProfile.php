@@ -14,4 +14,6 @@ class ArcaProfile extends Model
     {
         return $this->hasMany(Invoice::class);
     }
+
+    public function defaultForBillingClients() { return $this->hasMany(BillingClient::class, 'default_arca_profile_id'); }
 }
