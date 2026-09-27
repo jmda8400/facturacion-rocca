@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:tns="urn:test-wsfe"
+    targetNamespace="urn:test-wsfe">
+    <types/>
+    <message name="EmptyRequest"/>
+    <message name="EmptyResponse"/>
+    <portType name="WsfePortType">
+        <operation name="FECompUltimoAutorizado">
+            <input message="tns:EmptyRequest"/>
+            <output message="tns:EmptyResponse"/>
+        </operation>
+    </portType>
+    <binding name="WsfeBinding" type="tns:WsfePortType">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+        <operation name="FECompUltimoAutorizado">
+            <soap:operation soapAction="urn:test-wsfe#FECompUltimoAutorizado"/>
+            <input><soap:body use="literal"/></input>
+            <output><soap:body use="literal"/></output>
+        </operation>
+    </binding>
+    <service name="WsfeService">
+        <port name="WsfePort" binding="tns:WsfeBinding">
+            <soap:address location="https://example.invalid/wsfe"/>
+        </port>
+    </service>
+</definitions>
