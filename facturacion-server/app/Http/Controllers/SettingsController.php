@@ -35,8 +35,8 @@ class SettingsController
     public function store(Request $r)
     {
         $d = $r->validate([
-            'name' => ['required', 'string', 'max:100'], 'cuit' => ['required', 'regex:/^\d{11}$/'], 'sales_point' => ['required', 'integer', 'min:1'],
-            'business_name' => ['required', 'string', 'max:200'], 'address' => ['required', 'string', 'max:300'], 'vat_condition' => ['required', 'string', 'max:100'],
+            'name' => ['required', 'string', 'max:100'], 'cuit' => ['required', 'regex:/^\d{11}$/'], 'sales_point' => ['nullable', 'integer', 'min:1'],
+            'business_name' => ['nullable', 'string', 'max:200'], 'address' => ['nullable', 'string', 'max:300'], 'vat_condition' => ['nullable', 'string', 'max:100'],
             'gross_income' => ['nullable', 'string', 'max:100'], 'activity_started_at' => ['nullable', 'date'],
             'certificate' => ['required', 'file', 'max:100', 'extensions:crt'],
             'private_key' => ['required', 'file', 'max:100', 'extensions:key'],
@@ -53,8 +53,8 @@ class SettingsController
         ArcaProfile::create([
             'slug' => $slug,
             'name' => $d['name'],
-            'cuit' => $d['cuit'], 'sales_point' => $d['sales_point'], 'business_name' => $d['business_name'], 'address' => $d['address'],
-            'vat_condition' => $d['vat_condition'], 'gross_income' => $d['gross_income'] ?? null, 'activity_started_at' => $d['activity_started_at'] ?? null,
+            'cuit' => $d['cuit'], 'sales_point' => $d['sales_point'] ?? null, 'business_name' => $d['business_name'] ?? null, 'address' => $d['address'] ?? null,
+            'vat_condition' => $d['vat_condition'] ?? null, 'gross_income' => $d['gross_income'] ?? null, 'activity_started_at' => $d['activity_started_at'] ?? null,
             'certificate_path' => $cert,
             'private_key_path' => $key,
             'ta_path' => $base.'/TA.xml',
@@ -65,7 +65,7 @@ class SettingsController
 
     public function update(Request $r, ArcaProfile $profile)
     {
-        $d = $r->validate(['name'=>'required|string|max:100','cuit'=>['required','regex:/^\d{11}$/'],'sales_point'=>'required|integer|min:1','business_name'=>'required|string|max:200','address'=>'required|string|max:300','vat_condition'=>'required|string|max:100','gross_income'=>'nullable|string|max:100','activity_started_at'=>'nullable|date','certificate'=>'nullable|file|max:100|extensions:crt','private_key'=>'nullable|file|max:100|extensions:key']);
+        $d = $r->validate(['name'=>'required|string|max:100','cuit'=>['required','regex:/^\d{11}$/'],'sales_point'=>'nullable|integer|min:1','business_name'=>'nullable|string|max:200','address'=>'nullable|string|max:300','vat_condition'=>'nullable|string|max:100','gross_income'=>'nullable|string|max:100','activity_started_at'=>'nullable|date','certificate'=>'nullable|file|max:100|extensions:crt','private_key'=>'nullable|file|max:100|extensions:key']);
         if ($r->hasFile('certificate') xor $r->hasFile('private_key')) return back()->withErrors(['certificate'=>'Para rotar credenciales debe cargar certificado y clave juntos.'])->withInput();
         if ($r->hasFile('certificate')) { $this->validateCredentials($r); $base='arca/'.$profile->slug; $d['certificate_path']=$r->file('certificate')->storeAs($base,'certificate.crt'); $d['private_key_path']=$r->file('private_key')->storeAs($base,'private.key'); Storage::delete($profile->ta_path); }
         unset($d['certificate'], $d['private_key']); $profile->update($d);
