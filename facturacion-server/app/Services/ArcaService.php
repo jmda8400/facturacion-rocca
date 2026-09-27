@@ -61,9 +61,9 @@ return $ta;
     public function authorize(ArcaProfile $p, array $data): array
     {
         $ta = $this->ticket($p);
-        $auth = ['Token' => (string) $ta->credentials->token, 'Sign' => (string) $ta->credentials->sign, 'Cuit' => (int) $p->cuit];
+        $auth = $this->auth($p, $ta);
         $type = $data['invoice_type'] === 'A' ? 1 : 6;
-        $client = new SoapClient(config('billing.arca.wsfe_wsdl'), ['exceptions' => true, 'trace' => true, 'cache_wsdl' => WSDL_CACHE_NONE, 'connection_timeout' => 30]);
+        $client = $this->wsfeClient();
         $last = $client->FECompUltimoAutorizado(['Auth' => $auth, 'PtoVta' => $p->sales_point, 'CbteTipo' => $type]);
         $number = (int) ($last->FECompUltimoAutorizadoResult->CbteNro ?? 0) + 1;
         $total = round((float) $data['total'], 2);
@@ -80,5 +80,49 @@ return $ta;
         }
 
 return ['type' => $type, 'number' => $number, 'date' => date('Y-m-d'), 'total' => $total, 'net' => $net, 'vat' => $vat, 'cae' => (string) $approved->CAE, 'cae_expires_at' => CarbonImmutable::createFromFormat('Ymd', (string) $approved->CAEFchVto)->format('Y-m-d')];
+    }
+
+    /**
+     * Consulta el último comprobante sin solicitar ni emitir uno nuevo.
+     */
+    public function lastAuthorized(ArcaProfile $p, int $voucherType): int
+    {
+        $ta = $this->ticket($p);
+        $response = $this->wsfeClient()->FECompUltimoAutorizado([
+            'Auth' => $this->auth($p, $ta),
+            'PtoVta' => $p->sales_point,
+            'CbteTipo' => $voucherType,
+        ]);
+
+        $result = $response->FECompUltimoAutorizadoResult ?? null;
+        if (! is_object($result) || ! isset($result->CbteNro)) {
+            throw new RuntimeException('ARCA WSFE devolvió una respuesta inválida.');
+        }
+
+        return (int) $result->CbteNro;
+    }
+
+    private function auth(ArcaProfile $p, SimpleXMLElement $ta): array
+    {
+        return ['Token' => (string) $ta->credentials->token, 'Sign' => (string) $ta->credentials->sign, 'Cuit' => (int) $p->cuit];
+    }
+
+    private function wsfeClient(): SoapClient
+    {
+        $context = stream_context_create([
+            'ssl' => [
+                'ciphers' => config('billing.arca.wsfe_ssl_ciphers'),
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+
+        return new SoapClient(config('billing.arca.wsfe_wsdl'), [
+            'exceptions' => true,
+            'trace' => true,
+            'cache_wsdl' => WSDL_CACHE_NONE,
+            'connection_timeout' => 30,
+            'stream_context' => $context,
+        ]);
     }
 }
