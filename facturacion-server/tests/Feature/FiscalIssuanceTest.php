@@ -130,6 +130,17 @@ class FiscalIssuanceTest extends TestCase
         $this->assertNull($invoice->fresh()->cae);
     }
 
+    public function test_reconciliation_checks_available_fiscal_contract_fields(): void
+    {
+        $invoice = $this->invoice(['voucher_number' => 71, 'status' => 'fiscal_pending']);
+        $arca = $this->arca();
+        $mismatch = $this->authorization(71) + ['concept' => 2, 'vat_condition_id' => 5];
+        $arca->shouldReceive('consult')->once()->andReturn($mismatch);
+        $arca->shouldNotReceive('lastAuthorized', 'authorize');
+        $this->run($invoice, $arca);
+        $this->assertSame('review_required', $invoice->fresh()->status);
+    }
+
     private function run(Invoice $invoice, ArcaService $arca, ?InvoiceRenderer $renderer = null): void
     {
         $renderer ??= tap(Mockery::mock(InvoiceRenderer::class), fn ($mock) => $mock->shouldReceive('render')->andReturn('invoices/test.pdf'));
@@ -147,7 +158,7 @@ class FiscalIssuanceTest extends TestCase
 
     private function invoice(array $changes = [], $createdAt = null): Invoice
     {
-        $payload = ['external_reference' => uniqid('REF-'), 'invoice_type' => 'B', 'customer' => ['name' => 'Ana', 'address' => 'Bariloche', 'vat_condition' => 'CF', 'document_type' => 96, 'document_number' => 12345678], 'items' => [['description' => 'Servicio', 'quantity' => 1, 'unit_price' => 121]], 'total' => 121, 'email_to' => null];
+        $payload = ['external_reference' => uniqid('REF-'), 'invoice_type' => 'B', 'concept' => 1, 'customer' => ['name' => 'Ana', 'address' => 'Bariloche', 'vat_condition' => 'CF', 'vat_condition_id' => 5, 'document_type' => 96, 'document_number' => 12345678], 'items' => [['description' => 'Servicio', 'quantity' => 1, 'unit_price' => 121]], 'total' => 121, 'email_to' => null];
         $invoice = Invoice::create(array_merge(['idempotency_key' => uniqid('key-'), 'arca_profile_id' => $this->profile->id, 'external_reference' => $payload['external_reference'], 'status' => 'pending', 'invoice_type' => 'B', 'request_payload' => $payload], $changes));
         if ($createdAt) {
             $invoice->timestamps = false;

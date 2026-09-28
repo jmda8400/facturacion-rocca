@@ -45,14 +45,18 @@ Crear requiere `Authorization: Bearer TOKEN`, `Idempotency-Key` (1–100 caracte
   "external_reference":"BOOKING-ABC123",
   "profile":"rocca",
   "invoice_type":"B",
-  "customer":{"name":"Juan Pérez","address":"Bariloche","vat_condition":"Consumidor Final","document_type":99,"document_number":0},
+  "concept":2,
+  "service_from":"2026-12-10",
+  "service_to":"2026-12-11",
+  "payment_due_date":"2026-12-10",
+  "customer":{"name":"Juan Pérez","address":"Bariloche","vat_condition":"Consumidor Final","vat_condition_id":5,"document_type":99,"document_number":0},
   "items":[{"description":"Servicio Refugio Rocca","quantity":2,"unit_price":60000}],
   "total":120000,
   "email_to":"cliente@example.com"
 }
 ```
 
-`profile` es opcional; siempre se usa el perfil predeterminado del cliente y, si se envía, debe coincidir. `total` debe coincidir con la suma redondeada de ítems. Una creación nueva responde `202`; un replay idéntico, `200`. La respuesta incluye `id`, `external_reference`, `status`, `source` derivado del token, datos CAE si existen, `status_url` y `download_url` al completar.
+`concept` es obligatorio (1 productos, 2 servicios, 3 productos y servicios). Para 2/3, `service_from`, `service_to` y `payment_due_date` son obligatorias en formato `YYYY-MM-DD`; el fin no puede preceder al inicio y el vencimiento no puede preceder la fecha del comprobante. `customer.vat_condition_id` es el entero obligatorio enviado explícitamente a ARCA y no se infiere de `customer.vat_condition`. `profile` es opcional; siempre se usa el perfil predeterminado del cliente y, si se envía, debe coincidir. `total` debe coincidir con la suma redondeada de ítems. Una creación nueva responde `202`; un replay idéntico, `200`. La respuesta incluye `id`, `external_reference`, `status`, `source` derivado del token, datos CAE si existen, `status_url` y `download_url` al completar.
 
 La idempotencia es `(billing_client_id, idempotency_key)`: Reservas y Comandas pueden usar la misma clave. El servidor calcula SHA-256 del payload validado canonicalizado. Misma clave/payload recupera una sola factura y no reencola; misma clave/payload distinto devuelve `409`. El índice único de base y el manejo de duplicate-key protegen requests concurrentes. Tras renovar un token vencido se debe repetir con **la misma clave**.
 
@@ -89,7 +93,7 @@ pending -> processing -> fiscal_pending -> authorized -> completed
 
 ```bash
 TOKEN=$(curl -fsS -X POST https://facturacion.refugioagostinorocca.com/api/v1/auth/login -H 'Content-Type: application/json' -d '{"username":"reservas","password":"PASSWORD"}' | php -r '$j=json_decode(stream_get_contents(STDIN),true); echo $j["data"]["token"];')
-curl -X POST https://facturacion.refugioagostinorocca.com/api/v1/invoices -H "Authorization: Bearer $TOKEN" -H 'Idempotency-Key: booking-payment-123' -H 'Content-Type: application/json' -d '{"external_reference":"BOOKING-ABC123","invoice_type":"B","customer":{"name":"Juan Pérez","address":"Bariloche","vat_condition":"Consumidor Final","document_type":99,"document_number":0},"items":[{"description":"Pernocte","quantity":2,"unit_price":60000}],"total":120000}'
+curl -X POST https://facturacion.refugioagostinorocca.com/api/v1/invoices -H "Authorization: Bearer $TOKEN" -H 'Idempotency-Key: booking-payment-123' -H 'Content-Type: application/json' -d '{"external_reference":"BOOKING-ABC123","invoice_type":"B","concept":2,"service_from":"2026-12-10","service_to":"2026-12-11","payment_due_date":"2026-12-10","customer":{"name":"Juan Pérez","address":"Bariloche","vat_condition":"Consumidor Final","vat_condition_id":5,"document_type":99,"document_number":0},"items":[{"description":"Pernocte","quantity":2,"unit_price":60000}],"total":120000}'
 curl -H "Authorization: Bearer $TOKEN" https://facturacion.refugioagostinorocca.com/api/v1/invoices/UUID
 curl -o factura.pdf -H "Authorization: Bearer $TOKEN" https://facturacion.refugioagostinorocca.com/api/v1/invoices/UUID/pdf
 ```
@@ -98,7 +102,7 @@ curl -o factura.pdf -H "Authorization: Bearer $TOKEN" https://facturacion.refugi
 
 ```bash
 TOKEN=$(curl -fsS -X POST https://facturacion.refugioagostinorocca.com/api/v1/auth/login -H 'Content-Type: application/json' -d '{"username":"comandas","password":"PASSWORD"}' | php -r '$j=json_decode(stream_get_contents(STDIN),true); echo $j["data"]["token"];')
-curl -X POST https://facturacion.refugioagostinorocca.com/api/v1/invoices -H "Authorization: Bearer $TOKEN" -H 'Idempotency-Key: order-payment-456' -H 'Content-Type: application/json' -d '{"external_reference":"ORDER-456","invoice_type":"B","customer":{"name":"Cliente mostrador","address":"Bariloche","vat_condition":"Consumidor Final","document_type":99,"document_number":0},"items":[{"description":"Consumo","quantity":1,"unit_price":15000}],"total":15000}'
+curl -X POST https://facturacion.refugioagostinorocca.com/api/v1/invoices -H "Authorization: Bearer $TOKEN" -H 'Idempotency-Key: order-payment-456' -H 'Content-Type: application/json' -d '{"external_reference":"ORDER-456","invoice_type":"B","concept":1,"customer":{"name":"Cliente mostrador","address":"Bariloche","vat_condition":"Consumidor Final","vat_condition_id":5,"document_type":99,"document_number":0},"items":[{"description":"Consumo","quantity":1,"unit_price":15000}],"total":15000}'
 curl -H "Authorization: Bearer $TOKEN" https://facturacion.refugioagostinorocca.com/api/v1/invoices/UUID
 curl -o factura.pdf -H "Authorization: Bearer $TOKEN" https://facturacion.refugioagostinorocca.com/api/v1/invoices/UUID/pdf
 ```
@@ -106,6 +110,9 @@ curl -o factura.pdf -H "Authorization: Bearer $TOKEN" https://facturacion.refugi
 Si cualquiera recibe `401` con `data.token_expired=true`: hacer login, guardar el token nuevo y repetir el POST con **la misma `Idempotency-Key`**.
 
 ## ARCA, panel y cronómetro
+
+El cálculo vigente admite únicamente IVA 21% incluido: `neto = total / 1.21` e `IVA = total - neto`. No se admiten otras alícuotas en esta versión. Para consultar sin emitir las condiciones IVA receptor habilitadas: `php artisan arca:check-vat-conditions --profile=sistema-de-reservas --class=B`.
+
 
 En `/settings` se crean/editan perfiles con CUIT real de 11 dígitos, punto de venta positivo, razón social, domicilio, condición IVA y datos fiscales opcionales. `.crt` y `.key` deben ser legibles por OpenSSL y corresponder; se guardan sólo en `storage/app/private`. El panel muestra trazabilidad de facturas y una terminal de eventos sin secretos.
 

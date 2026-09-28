@@ -6,13 +6,11 @@
 <main class="wrap">
 <div class="card">
     <div class="top-actions">
-        <div class="top-actions__brand"><strong>Refugio Agostino Rocca</strong><span>Panel de facturación</span></div>
+        <div class="top-actions__brand"><strong>Refugio Agostino Rocca</strong></div>
         <form method="post" action="{{ route('settings.logout') }}">@csrf<button class="header-action">Cerrar sesión</button></form>
     </div>
     <div class="page-heading">
-        <p class="eyebrow">Panel de facturación</p>
         <h1 class="page-title">Facturación central</h1>
-        <p class="page-intro">Administrá los puntos de venta, las credenciales de ARCA y la trazabilidad de los comprobantes desde un único lugar.</p>
     </div>
 
     @if(session('status'))<div class="alert alert--success" role="status">{{ session('status') }}</div>@endif
@@ -21,7 +19,6 @@
     <section class="panel section" aria-labelledby="register-title">
         <div class="panel__header">
             <h2 id="register-title">Registrar punto de venta</h2>
-            <p>Ingresá los datos fiscales y cargá las credenciales provistas por ARCA.</p>
         </div>
         <form method="post" enctype="multipart/form-data" action="{{ route('settings.profiles.store') }}">
             @csrf
