@@ -12,29 +12,31 @@ use Symfony\Component\Process\Process;
 
 class ArcaService
 {
-    public function ticket(ArcaProfile $p): SimpleXMLElement
+    public function ticket(ArcaProfile $profile): SimpleXMLElement
     {
-        $path = Storage::path($p->ta_path);
+        $path = Storage::path($profile->ta_path);
         if (is_file($path)) {
-            $ta = @simplexml_load_file($path);
-            $expiration = $ta ? strtotime((string) $ta->header->expirationTime) : 0;
+            $ticket = @simplexml_load_file($path);
+            $expiration = $ticket ? strtotime((string) $ticket->header->expirationTime) : 0;
             if ($expiration - time() > config('billing.arca.renew_before_minutes') * 60) {
-                return $ta;
+                return $ticket;
             }
         }
 
-return $this->renew($p);
+        return $this->renew($profile);
     }
 
-    public function renew(ArcaProfile $p): SimpleXMLElement
+    public function renew(ArcaProfile $profile): SimpleXMLElement
     {
-        $cert = Storage::path($p->certificate_path);
-        $key = Storage::path($p->private_key_path);
-        foreach ([$cert, $key] as $file) {
+        $certificate = Storage::path($profile->certificate_path);
+        $key = Storage::path($profile->private_key_path);
+        foreach ([$certificate, $key] as $file) {
             if (! is_readable($file)) {
                 throw new RuntimeException("Credencial ARCA no accesible: $file");
             }
-        }$now = CarbonImmutable::now('America/Argentina/Buenos_Aires');
+        }
+
+        $now = CarbonImmutable::now('America/Argentina/Buenos_Aires');
         $tra = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header/><service>wsfe</service></loginTicketRequest>');
         $tra->header->uniqueId = $now->timestamp;
         $tra->header->generationTime = $now->subMinute()->format('Y-m-d\TH:i:sP');
@@ -42,58 +44,92 @@ return $this->renew($p);
         $xml = tempnam(sys_get_temp_dir(), 'tra_');
         $cms = tempnam(sys_get_temp_dir(), 'cms_');
         file_put_contents($xml, $tra->asXML());
-        $process = new Process(['openssl', 'smime', '-sign', '-signer', $cert, '-inkey', $key, '-outform', 'DER', '-nodetach', '-binary', '-in', $xml, '-out', $cms]);
-        $process->mustRun();
+        (new Process(['openssl', 'smime', '-sign', '-signer', $certificate, '-inkey', $key, '-outform', 'DER', '-nodetach', '-binary', '-in', $xml, '-out', $cms]))->mustRun();
         $client = new SoapClient(null, ['location' => config('billing.arca.wsaa_url'), 'uri' => 'http://wsaa.view.sua.dvadac.desein.afip.gov.ar/ws/services/LoginCms', 'exceptions' => true]);
         $raw = $client->loginCms(base64_encode(file_get_contents($cms)));
         @unlink($xml);
         @unlink($cms);
-        Storage::makeDirectory(dirname($p->ta_path));
-        Storage::put($p->ta_path, $raw);
-        $ta = simplexml_load_string($raw);
-        if (! $ta) {
+        Storage::makeDirectory(dirname($profile->ta_path));
+        Storage::put($profile->ta_path, $raw);
+        $ticket = simplexml_load_string($raw);
+        if (! $ticket) {
             throw new RuntimeException('ARCA devolvió un Ticket de Acceso inválido.');
         }
 
-return $ta;
+        return $ticket;
     }
 
-    public function authorize(ArcaProfile $p, array $data): array
+    /** Solicita exactamente el número durablemente reservado por la aplicación. */
+    public function authorize(ArcaProfile $profile, array $data, int $number): array
     {
-        $ta = $this->ticket($p);
-        $auth = $this->auth($p, $ta);
-        $type = $data['invoice_type'] === 'A' ? 1 : 6;
-        $client = $this->wsfeClient();
-        $last = $client->FECompUltimoAutorizado(['Auth' => $auth, 'PtoVta' => $p->sales_point, 'CbteTipo' => $type]);
-        $number = (int) ($last->FECompUltimoAutorizadoResult->CbteNro ?? 0) + 1;
-        $total = round((float) $data['total'], 2);
-        $net = round($total / 1.21, 2);
-        $vat = round($total - $net, 2);
-        $detail = ['Concepto' => 1, 'DocTipo' => $data['customer']['document_type'], 'DocNro' => (int) $data['customer']['document_number'], 'CbteDesde' => $number, 'CbteHasta' => $number, 'CbteFch' => date('Ymd'), 'ImpTotal' => $total, 'ImpTotConc' => 0, 'ImpNeto' => $net, 'ImpOpEx' => 0, 'ImpTrib' => 0, 'ImpIVA' => $vat, 'MonId' => 'PES', 'MonCotiz' => 1, 'Iva' => ['AlicIva' => [['Id' => 5, 'BaseImp' => $net, 'Importe' => $vat]]]];
-        $response = $client->FECAESolicitar(['Auth' => $auth, 'FeCAEReq' => ['FeCabReq' => ['CantReg' => 1, 'PtoVta' => $p->sales_point, 'CbteTipo' => $type], 'FeDetReq' => ['FECAEDetRequest' => [$detail]]]]);
+        $type = $this->voucherType($data['invoice_type']);
+        $amounts = $this->amounts($data);
+        $date = CarbonImmutable::now('America/Argentina/Buenos_Aires')->format('Ymd');
+        $detail = [
+            'Concepto' => 1,
+            'DocTipo' => (int) $data['customer']['document_type'],
+            'DocNro' => (int) $data['customer']['document_number'],
+            'CbteDesde' => $number,
+            'CbteHasta' => $number,
+            'CbteFch' => $date,
+            'ImpTotal' => $amounts['total'],
+            'ImpTotConc' => 0,
+            'ImpNeto' => $amounts['net'],
+            'ImpOpEx' => 0,
+            'ImpTrib' => 0,
+            'ImpIVA' => $amounts['vat'],
+            'MonId' => 'PES',
+            'MonCotiz' => 1,
+            'Iva' => ['AlicIva' => [['Id' => 5, 'BaseImp' => $amounts['net'], 'Importe' => $amounts['vat']]]],
+        ];
+        $response = $this->wsfeClient()->FECAESolicitar([
+            'Auth' => $this->authentication($profile),
+            'FeCAEReq' => ['FeCabReq' => ['CantReg' => 1, 'PtoVta' => $profile->sales_point, 'CbteTipo' => $type], 'FeDetReq' => ['FECAEDetRequest' => [$detail]]],
+        ]);
         $result = $response->FECAESolicitarResult ?? null;
         $approved = $result?->FeDetResp?->FECAEDetResponse ?? null;
         if (is_array($approved)) {
             $approved = $approved[0] ?? null;
-        }if (! $approved || ($approved->Resultado ?? null) !== 'A') {
+        }
+        if (! $approved || ($approved->Resultado ?? null) !== 'A') {
             throw new RuntimeException('ARCA rechazó el comprobante: '.json_encode($result?->Errors ?? $approved?->Observaciones, JSON_UNESCAPED_UNICODE));
         }
 
-return ['type' => $type, 'number' => $number, 'date' => date('Y-m-d'), 'total' => $total, 'net' => $net, 'vat' => $vat, 'cae' => (string) $approved->CAE, 'cae_expires_at' => CarbonImmutable::createFromFormat('Ymd', (string) $approved->CAEFchVto)->format('Y-m-d')];
+        return $this->authorization($type, $number, $date, $amounts, (string) $approved->CAE, (string) $approved->CAEFchVto, (int) $data['customer']['document_type'], (int) $data['customer']['document_number'], (int) $profile->sales_point);
     }
 
-    /**
-     * Consulta el último comprobante sin solicitar ni emitir uno nuevo.
-     */
-    public function lastAuthorized(ArcaProfile $p, int $voucherType): int
+    /** Consulta un comprobante sin emitir nada. Devuelve null cuando aún no existe. */
+    public function consult(ArcaProfile $profile, int $voucherType, int $number): ?array
     {
-        $ta = $this->ticket($p);
-        $response = $this->wsfeClient()->FECompUltimoAutorizado([
-            'Auth' => $this->auth($p, $ta),
-            'PtoVta' => $p->sales_point,
-            'CbteTipo' => $voucherType,
+        $response = $this->wsfeClient()->FECompConsultar([
+            'Auth' => $this->authentication($profile),
+            'FeCompConsReq' => ['PtoVta' => $profile->sales_point, 'CbteTipo' => $voucherType, 'CbteNro' => $number],
         ]);
+        $result = $response->FECompConsultarResult?->ResultGet ?? null;
+        if (! $result || ! isset($result->CbteDesde)) {
+            return null;
+        }
 
+        return [
+            'type' => (int) ($result->CbteTipo ?? $voucherType),
+            'sales_point' => (int) ($result->PtoVta ?? $profile->sales_point),
+            'number' => (int) $result->CbteDesde,
+            'date' => CarbonImmutable::createFromFormat('Ymd', (string) $result->CbteFch)->format('Y-m-d'),
+            'total' => round((float) $result->ImpTotal, 2),
+            'net' => round((float) $result->ImpNeto, 2),
+            'vat' => round((float) $result->ImpIVA, 2),
+            'currency' => (string) ($result->MonId ?? ''),
+            'currency_rate' => round((float) ($result->MonCotiz ?? 0), 6),
+            'document_type' => (int) $result->DocTipo,
+            'document_number' => (int) $result->DocNro,
+            'cae' => (string) $result->CodAutorizacion,
+            'cae_expires_at' => CarbonImmutable::createFromFormat('Ymd', (string) $result->FchVto)->format('Y-m-d'),
+        ];
+    }
+
+    public function lastAuthorized(ArcaProfile $profile, int $voucherType): int
+    {
+        $response = $this->wsfeClient()->FECompUltimoAutorizado(['Auth' => $this->authentication($profile), 'PtoVta' => $profile->sales_point, 'CbteTipo' => $voucherType]);
         $result = $response->FECompUltimoAutorizadoResult ?? null;
         if (! is_object($result) || ! isset($result->CbteNro)) {
             throw new RuntimeException('ARCA WSFE devolvió una respuesta inválida.');
@@ -102,27 +138,40 @@ return ['type' => $type, 'number' => $number, 'date' => date('Y-m-d'), 'total' =
         return (int) $result->CbteNro;
     }
 
-    private function auth(ArcaProfile $p, SimpleXMLElement $ta): array
+    public function voucherType(string $invoiceType): int
     {
-        return ['Token' => (string) $ta->credentials->token, 'Sign' => (string) $ta->credentials->sign, 'Cuit' => (int) $p->cuit];
+        return $invoiceType === 'A' ? 1 : 6;
     }
 
-    private function wsfeClient(): SoapClient
+    public function expectedAmounts(array $data): array
     {
-        $context = stream_context_create([
-            'ssl' => [
-                'ciphers' => config('billing.arca.wsfe_ssl_ciphers'),
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ],
-        ]);
+        return $this->amounts($data);
+    }
 
-        return new SoapClient(config('billing.arca.wsfe_wsdl'), [
-            'exceptions' => true,
-            'trace' => true,
-            'cache_wsdl' => WSDL_CACHE_NONE,
-            'connection_timeout' => 30,
-            'stream_context' => $context,
-        ]);
+    private function amounts(array $data): array
+    {
+        $total = round((float) $data['total'], 2);
+        $net = round($total / 1.21, 2);
+
+        return ['total' => $total, 'net' => $net, 'vat' => round($total - $net, 2)];
+    }
+
+    private function authorization(int $type, int $number, string $date, array $amounts, string $cae, string $expires, int $documentType, int $documentNumber, int $salesPoint): array
+    {
+        return $amounts + ['type' => $type, 'sales_point' => $salesPoint, 'number' => $number, 'date' => CarbonImmutable::createFromFormat('Ymd', $date)->format('Y-m-d'), 'currency' => 'PES', 'currency_rate' => 1.0, 'document_type' => $documentType, 'document_number' => $documentNumber, 'cae' => $cae, 'cae_expires_at' => CarbonImmutable::createFromFormat('Ymd', $expires)->format('Y-m-d')];
+    }
+
+    private function authentication(ArcaProfile $profile): array
+    {
+        $ticket = $this->ticket($profile);
+
+        return ['Token' => (string) $ticket->credentials->token, 'Sign' => (string) $ticket->credentials->sign, 'Cuit' => (int) $profile->cuit];
+    }
+
+    protected function wsfeClient(): SoapClient
+    {
+        $context = stream_context_create(['ssl' => ['ciphers' => config('billing.arca.wsfe_ssl_ciphers'), 'verify_peer' => true, 'verify_peer_name' => true]]);
+
+        return new SoapClient(config('billing.arca.wsfe_wsdl'), ['exceptions' => true, 'trace' => true, 'cache_wsdl' => WSDL_CACHE_NONE, 'connection_timeout' => 30, 'stream_context' => $context]);
     }
 }

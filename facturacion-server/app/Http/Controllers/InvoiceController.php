@@ -64,7 +64,7 @@ class InvoiceController
     private function resource(Invoice $i): array
     {
         $i->loadMissing('billingClient');
-        return ['id' => $i->id, 'external_reference' => $i->external_reference, 'status' => $i->status, 'source' => $i->billingClient?->slug ?? 'legacy', 'voucher_number' => $i->voucher_number, 'cae' => $i->cae, 'cae_expires_at' => $i->cae_expires_at?->format('Y-m-d'), 'emailed_at' => $i->emailed_at?->toIso8601String(), 'error' => $i->status === 'failed' ? $i->error : null, 'status_url' => route('api.invoices.show', $i), 'download_url' => $i->status === 'completed' ? route('api.invoices.download',$i) : null];
+        return ['id' => $i->id, 'external_reference' => $i->external_reference, 'status' => $i->status, 'source' => $i->billingClient?->slug ?? 'legacy', 'voucher_number' => $i->voucher_number, 'cae' => $i->cae, 'cae_expires_at' => $i->cae_expires_at?->format('Y-m-d'), 'emailed_at' => $i->emailed_at?->toIso8601String(), 'error' => in_array($i->status, ['failed', 'fiscal_pending', 'review_required'], true) ? $i->error : null, 'status_url' => route('api.invoices.show', $i), 'download_url' => $i->status === 'completed' ? route('api.invoices.download',$i) : null];
     }
 
     private function authorizeOwnership(Request $request, Invoice $invoice): void { abort_unless($invoice->billing_client_id === $request->attributes->get('billing_client')->id, 404); }
