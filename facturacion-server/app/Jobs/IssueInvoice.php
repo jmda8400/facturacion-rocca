@@ -160,6 +160,11 @@ class IssueInvoice implements ShouldQueue
             && (int) $authorization['sales_point'] === (int) $invoice->profile->sales_point
             && (int) $authorization['document_type'] === (int) $customer['document_type']
             && (int) $authorization['document_number'] === (int) $customer['document_number']
+            && (! isset($authorization['concept']) || (int) $authorization['concept'] === (int) $invoice->request_payload['concept'])
+            && (! isset($authorization['vat_condition_id']) || (int) $authorization['vat_condition_id'] === (int) $customer['vat_condition_id'])
+            && (! isset($authorization['service_from']) || $authorization['service_from'] === ($invoice->request_payload['service_from'] ?? null))
+            && (! isset($authorization['service_to']) || $authorization['service_to'] === ($invoice->request_payload['service_to'] ?? null))
+            && (! isset($authorization['payment_due_date']) || $authorization['payment_due_date'] === ($invoice->request_payload['payment_due_date'] ?? null))
             && (! isset($authorization['currency']) || $authorization['currency'] === 'PES')
             && (! isset($authorization['currency_rate']) || abs((float) $authorization['currency_rate'] - 1.0) < 0.000001)
             && abs((float) $authorization['total'] - $expected['total']) < 0.01

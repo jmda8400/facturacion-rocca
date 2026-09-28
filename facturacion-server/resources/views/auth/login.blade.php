@@ -6,7 +6,7 @@
 <main class="login-wrap">
     <section class="login-card" aria-labelledby="login-title">
         <p class="eyebrow">Facturación</p>
-        <h1 id="login-title">Panel de facturación</h1>
+        <h1 id="login-title">Facturación Rocca</h1>
         <p class="login-intro">Ingresá tus credenciales para continuar.</p>
         @if($errors->any())<div class="alert alert--danger" role="alert">{{ $errors->first() }}</div>@endif
         <form method="post" action="{{ url('/settings/login') }}">

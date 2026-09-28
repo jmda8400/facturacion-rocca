@@ -66,9 +66,10 @@ class ArcaService
         $amounts = $this->amounts($data);
         $date = CarbonImmutable::now('America/Argentina/Buenos_Aires')->format('Ymd');
         $detail = [
-            'Concepto' => 1,
+            'Concepto' => (int) $data['concept'],
             'DocTipo' => (int) $data['customer']['document_type'],
             'DocNro' => (int) $data['customer']['document_number'],
+            'CondicionIVAReceptorId' => (int) $data['customer']['vat_condition_id'],
             'CbteDesde' => $number,
             'CbteHasta' => $number,
             'CbteFch' => $date,
@@ -82,6 +83,13 @@ class ArcaService
             'MonCotiz' => 1,
             'Iva' => ['AlicIva' => [['Id' => 5, 'BaseImp' => $amounts['net'], 'Importe' => $amounts['vat']]]],
         ];
+        if (in_array((int) $data['concept'], [2, 3], true)) {
+            $detail += [
+                'FchServDesde' => str_replace('-', '', $data['service_from']),
+                'FchServHasta' => str_replace('-', '', $data['service_to']),
+                'FchVtoPago' => str_replace('-', '', $data['payment_due_date']),
+            ];
+        }
         $response = $this->wsfeClient()->FECAESolicitar([
             'Auth' => $this->authentication($profile),
             'FeCAEReq' => ['FeCabReq' => ['CantReg' => 1, 'PtoVta' => $profile->sales_point, 'CbteTipo' => $type], 'FeDetReq' => ['FECAEDetRequest' => [$detail]]],
@@ -95,7 +103,7 @@ class ArcaService
             throw new RuntimeException('ARCA rechazó el comprobante: '.json_encode($result?->Errors ?? $approved?->Observaciones, JSON_UNESCAPED_UNICODE));
         }
 
-        return $this->authorization($type, $number, $date, $amounts, (string) $approved->CAE, (string) $approved->CAEFchVto, (int) $data['customer']['document_type'], (int) $data['customer']['document_number'], (int) $profile->sales_point);
+        return $this->authorization($type, $number, $date, $amounts, (string) $approved->CAE, (string) $approved->CAEFchVto, (int) $data['customer']['document_type'], (int) $data['customer']['document_number'], (int) $profile->sales_point) + $this->fiscalContract($data);
     }
 
     /** Consulta un comprobante sin emitir nada. Devuelve null cuando aún no existe. */
@@ -110,7 +118,7 @@ class ArcaService
             return null;
         }
 
-        return [
+        $authorization = [
             'type' => (int) ($result->CbteTipo ?? $voucherType),
             'sales_point' => (int) ($result->PtoVta ?? $profile->sales_point),
             'number' => (int) $result->CbteDesde,
@@ -125,6 +133,25 @@ class ArcaService
             'cae' => (string) $result->CodAutorizacion,
             'cae_expires_at' => CarbonImmutable::createFromFormat('Ymd', (string) $result->FchVto)->format('Y-m-d'),
         ];
+
+        foreach (['Concepto' => 'concept', 'CondicionIVAReceptorId' => 'vat_condition_id'] as $soap => $key) {
+            if (isset($result->{$soap})) $authorization[$key] = (int) $result->{$soap};
+        }
+        foreach (['FchServDesde' => 'service_from', 'FchServHasta' => 'service_to', 'FchVtoPago' => 'payment_due_date'] as $soap => $key) {
+            if (isset($result->{$soap}) && (string) $result->{$soap} !== '') $authorization[$key] = CarbonImmutable::createFromFormat('Ymd', (string) $result->{$soap})->format('Y-m-d');
+        }
+
+        return $authorization;
+    }
+
+    /** Consulta parámetros fiscales; nunca solicita una autorización. */
+    public function vatConditions(ArcaProfile $profile, string $invoiceClass): array
+    {
+        $response = $this->wsfeClient()->FEParamGetCondicionIvaReceptor(['Auth' => $this->authentication($profile), 'ClaseCmp' => strtoupper($invoiceClass)]);
+        $items = $response->FEParamGetCondicionIvaReceptorResult?->ResultGet?->CondicionIvaReceptor ?? [];
+        $items = is_array($items) ? $items : [$items];
+
+        return array_map(fn ($item) => ['id' => (int) ($item->Id ?? 0), 'description' => (string) ($item->Desc ?? ''), 'class' => (string) ($item->Cmp_Clase ?? strtoupper($invoiceClass))], $items);
     }
 
     public function lastAuthorized(ArcaProfile $profile, int $voucherType): int
@@ -150,10 +177,22 @@ class ArcaService
 
     private function amounts(array $data): array
     {
+        // Compatibilidad fiscal actual: única alícuota soportada, IVA 21% incluido.
+        // Neto = total / 1.21; IVA = total - neto.
         $total = round((float) $data['total'], 2);
         $net = round($total / 1.21, 2);
 
         return ['total' => $total, 'net' => $net, 'vat' => round($total - $net, 2)];
+    }
+
+    private function fiscalContract(array $data): array
+    {
+        $contract = ['concept' => (int) $data['concept'], 'vat_condition_id' => (int) $data['customer']['vat_condition_id']];
+        if (in_array($contract['concept'], [2, 3], true)) {
+            $contract += ['service_from' => $data['service_from'], 'service_to' => $data['service_to'], 'payment_due_date' => $data['payment_due_date']];
+        }
+
+        return $contract;
     }
 
     private function authorization(int $type, int $number, string $date, array $amounts, string $cae, string $expires, int $documentType, int $documentNumber, int $salesPoint): array
