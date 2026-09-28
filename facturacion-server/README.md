@@ -56,7 +56,23 @@ Crear requiere `Authorization: Bearer TOKEN`, `Idempotency-Key` (1–100 caracte
 
 La idempotencia es `(billing_client_id, idempotency_key)`: Reservas y Comandas pueden usar la misma clave. El servidor calcula SHA-256 del payload validado canonicalizado. Misma clave/payload recupera una sola factura y no reencola; misma clave/payload distinto devuelve `409`. El índice único de base y el manejo de duplicate-key protegen requests concurrentes. Tras renovar un token vencido se debe repetir con **la misma clave**.
 
-Cada cliente sólo ve sus facturas. Un UUID ajeno devuelve `404` también para PDF, para no revelar su existencia. Estados de polling: `pending`, `processing`, `completed`, `failed`.
+Cada cliente sólo ve sus facturas. Un UUID ajeno devuelve `404` también para PDF, para no revelar su existencia. Estados de polling: `pending`, `processing`, `fiscal_pending` (número reservado, resultado aún incierto), `authorized` (CAE persistido, PDF pendiente), `completed`, `review_required` (conflicto fiscal que requiere intervención) y `failed`.
+
+## Máquina de estados fiscal e idempotencia ARCA
+
+La emisión se serializa con un lock por `(arca_profile_id, invoice_type)`. Dentro del lock se reserva `voucher_number` durablemente y nunca se reemplaza. Todo retry que encuentre un número reservado ejecuta primero `FECompConsultar`: si el comprobante coincide recupera CAE y vencimiento; si no existe, sólo reintenta `FECAESolicitar` para **ese mismo número** cuando `FECompUltimoAutorizado` confirma que es exactamente el próximo; si los datos difieren pasa a `review_required` sin emitir. Una reserva anterior sin CAE bloquea facturas posteriores del mismo perfil/tipo.
+
+El flujo de estados es:
+
+```text
+pending -> processing -> fiscal_pending -> authorized -> completed
+                          |                 |             |
+                          | timeout         | PDF falla   +-> email separado (puede reintentar)
+                          +-> reconcile ----+
+                          +-> review_required (conflicto terminal/manual)
+```
+
+`voucher_number`, CAE, fecha y vencimiento se persisten antes del PDF. Un retry en `authorized` sólo regenera el PDF. El correo corre en `SendInvoiceEmail`: un fallo se registra como `invoice.email_failed`, conserva `completed` y nunca reabre la emisión fiscal.
 
 | HTTP | Significado / acción |
 |---|---|
@@ -126,6 +142,14 @@ docker-compose exec -T app php artisan queue:failed
 curl --fail --silent --show-error https://facturacion.refugioagostinorocca.com/up
 docker-compose ps
 docker-compose logs --tail=100 app
+```
+
+La migración `2026_09_27_000001_harden_fiscal_issuance` agrega `voucher_date` y el índice único nullable `(arca_profile_id, invoice_type, voucher_number)`. Antes del deploy conviene comprobar que no existan duplicados históricos no nulos; después de levantar, reinicie los workers para cargar los jobs nuevos:
+
+```bash
+docker-compose exec -T app php artisan migrate --force
+docker-compose exec -T app php artisan queue:restart
+docker-compose exec -T app php artisan arca:check-wsfe
 ```
 
 Antes, se recomienda backup sin destruir volúmenes:

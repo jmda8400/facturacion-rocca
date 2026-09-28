@@ -9,9 +9,9 @@ class Invoice extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['billing_client_id', 'idempotency_key', 'request_fingerprint', 'arca_profile_id', 'external_reference', 'status', 'invoice_type', 'request_payload', 'voucher_number', 'cae', 'cae_expires_at', 'pdf_path', 'error', 'emailed_at'];
+    protected $fillable = ['billing_client_id', 'idempotency_key', 'request_fingerprint', 'arca_profile_id', 'external_reference', 'status', 'invoice_type', 'request_payload', 'voucher_number', 'voucher_date', 'cae', 'cae_expires_at', 'pdf_path', 'error', 'emailed_at'];
 
-    protected $casts = ['request_payload' => 'array', 'cae_expires_at' => 'date', 'emailed_at' => 'datetime'];
+    protected $casts = ['request_payload' => 'array', 'voucher_date' => 'date', 'cae_expires_at' => 'date', 'emailed_at' => 'datetime'];
 
     public function profile()
     {
