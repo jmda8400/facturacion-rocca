@@ -18,6 +18,7 @@ class InvoiceRenderer
         $options->set('isRemoteEnabled', false);
         $pdf = new Dompdf($options);
         $pdf->loadHtml($html);
+        $pdf->setPaper('A4', 'portrait');
         $pdf->render();
         $path = 'invoices/'.$invoice->id.'.pdf';
         Storage::put($path, $pdf->output());
