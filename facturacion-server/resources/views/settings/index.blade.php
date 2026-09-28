@@ -2,15 +2,18 @@
 
 @section('title', 'Administración')
 
-@section('header-action')
-<form method="post" action="{{ route('settings.logout') }}">@csrf<button class="header-action">Cerrar sesión</button></form>
-@endsection
-
 @section('content')
-<main class="page">
-    <p class="eyebrow">Panel de facturación</p>
-    <h1 class="page-title">Facturación central</h1>
-    <p class="page-intro">Administrá los puntos de venta, las credenciales de ARCA y la trazabilidad de los comprobantes desde un único lugar.</p>
+<main class="wrap">
+<div class="card">
+    <div class="top-actions">
+        <div class="top-actions__brand"><strong>Refugio Agostino Rocca</strong><span>Panel de facturación</span></div>
+        <form method="post" action="{{ route('settings.logout') }}">@csrf<button class="header-action">Cerrar sesión</button></form>
+    </div>
+    <div class="page-heading">
+        <p class="eyebrow">Panel de facturación</p>
+        <h1 class="page-title">Facturación central</h1>
+        <p class="page-intro">Administrá los puntos de venta, las credenciales de ARCA y la trazabilidad de los comprobantes desde un único lugar.</p>
+    </div>
 
     @if(session('status'))<div class="alert alert--success" role="status">{{ session('status') }}</div>@endif
     @if($errors->any())<div class="alert alert--danger" role="alert"><strong>No se pudieron guardar los datos.</strong><ul>@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul></div>@endif
@@ -92,6 +95,7 @@
             </table>
         </div>
     </section>
+</div>
 </main>
 @endsection
 
