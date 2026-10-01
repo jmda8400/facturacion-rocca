@@ -11,6 +11,7 @@ use App\Services\ArcaService;
 use App\Services\BillingEventLogger;
 use App\Services\InvoiceRenderer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
@@ -93,6 +94,39 @@ class FiscalIssuanceTest extends TestCase
         $this->assertTrue(BillingEvent::where('event', 'invoice.email_failed')->exists());
     }
 
+    public function test_invoice_email_has_bilingual_message_and_required_bcc_recipients(): void
+    {
+        Storage::fake();
+        $invoice = $this->invoice([
+            'status' => 'completed',
+            'pdf_path' => 'invoices/test.pdf',
+            'request_payload' => array_merge($this->invoicePayload(), ['email_to' => 'guest@example.com']),
+        ]);
+        Storage::put('invoices/test.pdf', 'pdf');
+
+        Mail::shouldReceive('raw')
+            ->once()
+            ->withArgs(function (string $body, callable $callback): bool {
+                $message = Mockery::mock(Message::class);
+                $message->shouldReceive('to')->once()->with('guest@example.com')->andReturnSelf();
+                $message->shouldReceive('subject')->once()->with('Factura Refugio Rocca')->andReturnSelf();
+                $message->shouldReceive('bcc')->once()->withArgs(function (array $recipients): bool {
+                    $this->assertContains('juanmanueldiazarbues@gmail.com', $recipients);
+                    $this->assertContains('refugiorocca@gmail.com', $recipients);
+
+                    return true;
+                })->andReturnSelf();
+                $message->shouldReceive('attach')->once()->andReturnSelf();
+                $callback($message);
+
+                return $body === "Adjuntamos tu factura electrónica.\nPlease find your electronic invoice attached.";
+            });
+
+        (new SendInvoiceEmail($invoice->id))->handle(app(BillingEventLogger::class));
+
+        $this->assertNotNull($invoice->fresh()->emailed_at);
+    }
+
     public function test_two_invoices_cannot_reserve_the_same_profile_type_and_number(): void
     {
         $first = $this->invoice(['voucher_number' => 51]);
@@ -158,7 +192,7 @@ class FiscalIssuanceTest extends TestCase
 
     private function invoice(array $changes = [], $createdAt = null): Invoice
     {
-        $payload = ['external_reference' => uniqid('REF-'), 'invoice_type' => 'B', 'concept' => 1, 'customer' => ['name' => 'Ana', 'address' => 'Bariloche', 'vat_condition' => 'CF', 'vat_condition_id' => 5, 'document_type' => 96, 'document_number' => 12345678], 'items' => [['description' => 'Servicio', 'quantity' => 1, 'unit_price' => 121]], 'total' => 121, 'email_to' => null];
+        $payload = $this->invoicePayload();
         $invoice = Invoice::create(array_merge(['idempotency_key' => uniqid('key-'), 'arca_profile_id' => $this->profile->id, 'external_reference' => $payload['external_reference'], 'status' => 'pending', 'invoice_type' => 'B', 'request_payload' => $payload], $changes));
         if ($createdAt) {
             $invoice->timestamps = false;
@@ -168,6 +202,11 @@ class FiscalIssuanceTest extends TestCase
         }
 
         return $invoice;
+    }
+
+    private function invoicePayload(): array
+    {
+        return ['external_reference' => uniqid('REF-'), 'invoice_type' => 'B', 'concept' => 1, 'customer' => ['name' => 'Ana', 'address' => 'Bariloche', 'vat_condition' => 'CF', 'vat_condition_id' => 5, 'document_type' => 96, 'document_number' => 12345678], 'items' => [['description' => 'Servicio', 'quantity' => 1, 'unit_price' => 121]], 'total' => 121, 'email_to' => null];
     }
 
     private function authorization(int $number): array
