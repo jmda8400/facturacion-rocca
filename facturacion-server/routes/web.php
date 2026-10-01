@@ -9,6 +9,7 @@ Route::get('/settings/login', [SettingsAuthController::class, 'form'])->name('se
 Route::post('/settings/login', [SettingsAuthController::class, 'login'])->middleware('throttle:6,1');
 Route::middleware('settings.auth')->prefix('settings')->group(function () {
     Route::get('/', [SettingsController::class, 'index'])->name('settings.index');
+    Route::put('/email', [SettingsController::class, 'updateEmail'])->name('settings.email.update');
     Route::post('/profiles', [SettingsController::class, 'store'])->name('settings.profiles.store');
     Route::put('/profiles/{profile}', [SettingsController::class, 'update'])->name('settings.profiles.update');
     Route::delete('/profiles/{profile}', [SettingsController::class, 'destroy'])->name('settings.profiles.destroy');

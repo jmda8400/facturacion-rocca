@@ -6,6 +6,7 @@ use App\Jobs\IssueInvoice;
 use App\Jobs\SendInvoiceEmail;
 use App\Models\ArcaProfile;
 use App\Models\BillingEvent;
+use App\Models\EmailSetting;
 use App\Models\Invoice;
 use App\Services\ArcaService;
 use App\Services\BillingEventLogger;
@@ -125,6 +126,33 @@ class FiscalIssuanceTest extends TestCase
         (new SendInvoiceEmail($invoice->id))->handle(app(BillingEventLogger::class));
 
         $this->assertNotNull($invoice->fresh()->emailed_at);
+    }
+
+    public function test_invoice_email_uses_bcc_recipients_saved_in_settings(): void
+    {
+        Storage::fake();
+        EmailSetting::create(['bcc_emails' => ['facturas@example.com']]);
+        $invoice = $this->invoice([
+            'status' => 'completed',
+            'pdf_path' => 'invoices/test.pdf',
+            'request_payload' => array_merge($this->invoicePayload(), ['email_to' => 'guest@example.com']),
+        ]);
+        Storage::put('invoices/test.pdf', 'pdf');
+
+        Mail::shouldReceive('raw')
+            ->once()
+            ->withArgs(function (string $body, callable $callback): bool {
+                $message = Mockery::mock(Message::class);
+                $message->shouldReceive('to')->once()->with('guest@example.com')->andReturnSelf();
+                $message->shouldReceive('subject')->once()->andReturnSelf();
+                $message->shouldReceive('bcc')->once()->with(['facturas@example.com'])->andReturnSelf();
+                $message->shouldReceive('attach')->once()->andReturnSelf();
+                $callback($message);
+
+                return true;
+            });
+
+        (new SendInvoiceEmail($invoice->id))->handle(app(BillingEventLogger::class));
     }
 
     public function test_two_invoices_cannot_reserve_the_same_profile_type_and_number(): void

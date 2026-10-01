@@ -16,6 +16,20 @@
     @if(session('status'))<div class="alert alert--success" role="status">{{ session('status') }}</div>@endif
     @if($errors->any())<div class="alert alert--danger" role="alert"><strong>No se pudieron guardar los datos.</strong><ul>@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul></div>@endif
 
+    <section class="panel section" aria-labelledby="email-title">
+        <div class="panel__header">
+            <h2 id="email-title">Copias ocultas de correo</h2>
+            <p>Cada factura enviada al cliente también se enviará a estas direcciones como copia oculta. Ingresá una dirección por línea.</p>
+        </div>
+        <form method="post" action="{{ route('settings.email.update') }}">
+            @csrf @method('PUT')
+            <div class="panel__body email-settings">
+                <label class="field" for="bcc-emails"><span>Destinatarios CCO</span><textarea id="bcc-emails" name="bcc_emails" rows="4" placeholder="correo@ejemplo.com">{{ old('bcc_emails', $bccEmails) }}</textarea></label>
+                <button class="button-primary" type="submit">Guardar correos</button>
+            </div>
+        </form>
+    </section>
+
     <section class="panel section" aria-labelledby="register-title">
         <div class="panel__header">
             <h2 id="register-title">Registrar punto de venta</h2>

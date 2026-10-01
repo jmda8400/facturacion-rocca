@@ -11,7 +11,7 @@
         * { box-sizing:border-box; }
         html { min-height:100%; scroll-behavior:smooth; }
         body { min-height:100vh; margin:0; color:var(--text); background:var(--body); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
-        button,input { font:inherit; }
+        button,input,textarea { font:inherit; }
         button { cursor:pointer; }
         .wrap { width:min(1120px,calc(100% - 32px)); margin:0 auto; padding:40px 0; }
         .card { padding:32px; background:var(--card); border:1px solid var(--border); border-radius:20px; box-shadow:var(--shadow); }
@@ -34,10 +34,12 @@
         .form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; align-items:end; }
         .field { display:block; min-width:0; }
         .field span { display:block; margin-bottom:7px; color:var(--secondary); font-size:.76rem; font-weight:800; }
-        .field input { width:100%; min-height:44px; padding:10px 12px; color:var(--text); background:var(--panel-alt); border:1px solid var(--border-strong); border-radius:10px; transition:border-color .2s,box-shadow .2s; }
+        .field input,.field textarea { width:100%; min-height:44px; padding:10px 12px; color:var(--text); background:var(--panel-alt); border:1px solid var(--border-strong); border-radius:10px; transition:border-color .2s,box-shadow .2s; }
+        .field textarea { resize:vertical; line-height:1.5; }
         .field input[type="file"] { padding:8px; font-size:.8rem; }
         .field input::file-selector-button { margin:-8px 10px -8px -8px; padding:10px 12px; color:var(--text); background:var(--button-secondary); border:0; border-right:1px solid var(--border-strong); font-weight:700; cursor:pointer; }
-        .field input:focus { outline:0; border-color:#94a3b8; box-shadow:0 0 0 3px #94a3b826; }
+        .field input:focus,.field textarea:focus { outline:0; border-color:#94a3b8; box-shadow:0 0 0 3px #94a3b826; }
+        .email-settings { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:end; }
         .button-primary,.button-link,.secondary,.button-danger,.header-action { min-height:42px; padding:10px 18px; display:inline-flex; align-items:center; justify-content:center; color:#fff; background:var(--button); border:0; border-radius:999px; font-weight:800; text-decoration:none; transition:background .2s,transform .2s; }
         .button-primary:hover,.button-link:hover,.header-action:hover { background:var(--button-hover); }
         .secondary { background:var(--button-secondary); }
@@ -84,7 +86,7 @@
         .login-help { margin:16px 0 0; display:flex; align-items:center; gap:8px; color:var(--muted); font-size:.78rem; }
         .login-help::before { content:""; width:7px; height:7px; flex:0 0 auto; border-radius:50%; background:var(--success); }
         @media (max-width:900px) { .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.profile-layout{grid-template-columns:1fr}.profile-form{padding:22px 0 0;border-left:0;border-top:1px solid var(--border)} }
-        @media (max-width:600px) { .wrap{width:min(100% - 20px,1120px);padding:10px 0}.card,.login-card{padding:22px}.top-actions{align-items:stretch;flex-direction:column}.top-actions form,.top-actions .header-action{width:100%}.page-heading{padding-top:22px}.section-heading{align-items:start;flex-direction:column}.form-grid{grid-template-columns:1fr}.profile-card,.panel__body{padding:16px}.panel__header{padding:17px 16px}.profile-form .button-primary{width:100%}.trace th,.trace td{padding:10px} }
+        @media (max-width:600px) { .wrap{width:min(100% - 20px,1120px);padding:10px 0}.card,.login-card{padding:22px}.top-actions{align-items:stretch;flex-direction:column}.top-actions form,.top-actions .header-action{width:100%}.page-heading{padding-top:22px}.section-heading{align-items:start;flex-direction:column}.form-grid,.email-settings{grid-template-columns:1fr}.email-settings .button-primary{width:100%}.profile-card,.panel__body{padding:16px}.panel__header{padding:17px 16px}.profile-form .button-primary{width:100%}.trace th,.trace td{padding:10px} }
         @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important; transition:none!important; } }
     </style>
 </head>
