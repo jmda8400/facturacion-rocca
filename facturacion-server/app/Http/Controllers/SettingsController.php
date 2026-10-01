@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\ArcaProfile;
 use App\Models\BillingEvent;
+use App\Models\EmailSetting;
 use App\Models\Invoice;
 use App\Services\BillingEventLogger;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -29,7 +31,30 @@ class SettingsController
         $events->record('timer.activated', 'Cronómetro de renovación activado en el panel.');
         $history = BillingEvent::latest('id')->limit(100)->get();
         $invoices = Invoice::with(['billingClient', 'profile'])->latest()->limit(50)->get();
-        return view('settings.index', compact('profiles', 'history', 'invoices'));
+        $bccEmails = implode("\n", EmailSetting::bccRecipients());
+
+        return view('settings.index', compact('profiles', 'history', 'invoices', 'bccEmails'));
+    }
+
+    public function updateEmail(Request $request)
+    {
+        $data = $request->validate([
+            'bcc_emails' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $emails = array_values(array_unique(array_filter(array_map(
+            fn (string $email) => strtolower(trim($email)),
+            preg_split('/[,;\s]+/', $data['bcc_emails'] ?? '') ?: []
+        ))));
+
+        Validator::make(
+            ['emails' => $emails],
+            ['emails.*' => ['email:rfc', 'max:254']],
+            ['emails.*.email' => 'Cada destinatario de copia oculta debe ser un correo electrónico válido.']
+        )->validate();
+
+        EmailSetting::query()->updateOrCreate(['id' => 1], ['bcc_emails' => $emails]);
+
+        return back()->with('status', 'Configuración de correo actualizada.');
     }
 
     public function store(Request $r)

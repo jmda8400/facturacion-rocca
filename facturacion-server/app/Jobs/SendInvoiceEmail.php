@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\EmailSetting;
 use App\Models\Invoice;
 use App\Services\BillingEventLogger;
 use Illuminate\Bus\Queueable;
@@ -32,8 +33,13 @@ class SendInvoiceEmail implements ShouldQueue
 
         try {
             $absolute = Storage::path($invoice->pdf_path);
-            Mail::raw("Adjuntamos tu factura electrónica.\nPlease find your electronic invoice attached.", function ($message) use ($recipient, $absolute, $invoice) {
-                $message->to($recipient)->subject('Factura Refugio Rocca')->bcc(config('billing.bcc'))->attach($absolute, ['as' => 'factura_'.$invoice->external_reference.'.pdf', 'mime' => 'application/pdf']);
+            $bccRecipients = EmailSetting::bccRecipients();
+            Mail::raw("Adjuntamos tu factura electrónica.\nPlease find your electronic invoice attached.", function ($message) use ($recipient, $absolute, $invoice, $bccRecipients) {
+                $message->to($recipient)->subject('Factura Refugio Rocca');
+                if ($bccRecipients) {
+                    $message->bcc($bccRecipients);
+                }
+                $message->attach($absolute, ['as' => 'factura_'.$invoice->external_reference.'.pdf', 'mime' => 'application/pdf']);
             });
             $invoice->update(['emailed_at' => now()]);
             $events->record('invoice.emailed', 'Factura enviada por correo.', ['invoice_id' => $invoice->id]);
