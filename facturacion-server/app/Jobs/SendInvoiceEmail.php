@@ -32,7 +32,7 @@ class SendInvoiceEmail implements ShouldQueue
 
         try {
             $absolute = Storage::path($invoice->pdf_path);
-            Mail::raw('Adjuntamos tu factura electrónica.', function ($message) use ($recipient, $absolute, $invoice) {
+            Mail::raw("Adjuntamos tu factura electrónica.\nPlease find your electronic invoice attached.", function ($message) use ($recipient, $absolute, $invoice) {
                 $message->to($recipient)->subject('Factura Refugio Rocca')->bcc(config('billing.bcc'))->attach($absolute, ['as' => 'factura_'.$invoice->external_reference.'.pdf', 'mime' => 'application/pdf']);
             });
             $invoice->update(['emailed_at' => now()]);
