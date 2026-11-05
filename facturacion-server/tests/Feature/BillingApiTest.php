@@ -42,5 +42,24 @@ class BillingApiTest extends TestCase
  public function test_invalid_token_without_accept_header_returns_json():void{$response=$this->withToken('invalid-token')->get('/api/v1/invoices/00000000-0000-4000-8000-000000000000');$response->assertUnauthorized()->assertHeader('Content-Type','application/json')->assertHeaderMissing('Access-Control-Allow-Origin')->assertJsonPath('error','Unauthorized')->assertJsonPath('status_code',401);$this->assertStringNotContainsStringIgnoringCase('<html',$response->getContent());}
  public function test_rate_limit_without_accept_header_returns_json():void{config()->set('billing.rate_limits.api',1);$p=$this->profile();$this->client('limited-client',$p);$token=$this->login('limited-client');$url='/api/v1/invoices/00000000-0000-4000-8000-000000000000';$this->withToken($token)->get($url)->assertNotFound();$response=$this->withToken($token)->get($url);$response->assertTooManyRequests()->assertHeader('Content-Type','application/json')->assertHeaderMissing('Access-Control-Allow-Origin')->assertJsonPath('error','Too Many Requests')->assertJsonPath('message','Demasiadas solicitudes. Intentá nuevamente más tarde.')->assertJsonPath('status_code',429);$this->assertStringNotContainsStringIgnoringCase('<html',$response->getContent());}
  public function test_idempotency_conflict_uses_error_envelope_without_cors():void{Bus::fake();$p=$this->profile();$this->client('conflict-client',$p);$token=$this->login('conflict-client');$this->post($token,'conflict-key')->assertAccepted();$response=$this->withToken($token)->withHeader('Idempotency-Key','conflict-key')->post('/api/v1/invoices',$this->payload(['external_reference'=>'CHANGED']));$response->assertStatus(409)->assertHeader('Content-Type','application/json')->assertHeaderMissing('Access-Control-Allow-Origin')->assertJsonPath('data',null)->assertJsonPath('error','Conflict')->assertJsonPath('status_code',409)->assertJsonPath('success',false);}
+ public function test_usd_factura_b_is_accepted_once_and_rejects_unsafe_currency_combinations():void
+ {
+  Bus::fake();
+  $p=$this->profile();
+  $this->client('reservas',$p);
+  $token=$this->login('reservas');
+  $usd=$this->payload(['currency'=>'USD','same_currency_payment'=>true,'invoice_type'=>'B']);
+  $first=$this->post($token,'paypal-capture-123',$usd)->assertAccepted()->assertJsonPath('currency','USD');
+  $this->assertDatabaseHas('invoices',['id'=>$first->json('id'),'invoice_type'=>'B']);
+  $invoice=Invoice::findOrFail($first->json('id'));
+  $this->assertSame('USD',$invoice->request_payload['currency']);
+  $this->assertTrue($invoice->request_payload['same_currency_payment']);
+  $this->post($token,'paypal-capture-123',$usd)->assertOk()->assertJsonPath('id',$first->json('id'));
+  $this->post($token,'paypal-capture-123',$this->payload(['currency'=>'ARS']))->assertStatus(409);
+  $this->post($token,'usd-a',$this->payload(['currency'=>'USD','same_currency_payment'=>true,'invoice_type'=>'A']))->assertUnprocessable();
+  $this->post($token,'usd-not-settled',$this->payload(['currency'=>'USD','same_currency_payment'=>false]))->assertUnprocessable();
+  $this->assertDatabaseCount('invoices',1);
+  Bus::assertDispatchedTimes(IssueInvoice::class,1);
+ }
  public function test_settings_keeps_traditional_web_redirects_and_html():void{$this->get('/settings')->assertRedirect('/settings/login')->assertHeaderMissing('Access-Control-Allow-Origin');$this->get('/settings/login')->assertOk()->assertHeader('Content-Type','text/html; charset=UTF-8');}
 }
