@@ -42,6 +42,38 @@ class InvoicePdfTest extends TestCase
         $this->assertStringContainsString('Fecha de Vto. de CAE:</span> 08/10/2026', $html);
     }
 
+    public function test_pdf_and_qr_use_dollars_and_the_authorized_rate(): void
+    {
+        $invoice = $this->invoice(1);
+        $arca = [
+            'type' => 6,
+            'number' => 2460,
+            'date' => '2026-09-28',
+            'total' => 80.00,
+            'vat' => 13.88,
+            'currency' => 'DOL',
+            'currency_rate' => 1450.123456,
+            'cae' => '12345678901234',
+            'cae_expires_at' => '2026-10-08',
+        ];
+        $html = view('invoices.pdf', [
+            'invoice' => $invoice,
+            'payload' => $invoice->request_payload,
+            'arca' => $arca,
+            'qr' => 'data:image/png;base64,qr-test',
+        ])->render();
+        $this->assertStringContainsString('Dólares estadounidenses (USD)', $html);
+        $this->assertStringContainsString('1 USD = $ 1.450,123456 ARS', $html);
+        $this->assertStringContainsString('US$ 80,00', $html);
+        $qr = (new \App\Services\ArcaQrService)->buildPayload(
+            '2026-09-28', '20123456789', 6, 6, 2460, 80, 'DOL',
+            1450.123456, 'E', '12345678901234', 99, 0
+        );
+        $this->assertSame('DOL', $qr['moneda']);
+        $this->assertSame(1450.123456, $qr['ctz']);
+        $this->assertSame(80.0, $qr['importe']);
+    }
+
     public function test_product_invoice_completely_hides_service_period(): void
     {
         $html = $this->renderView($this->invoice(1));
