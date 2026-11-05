@@ -50,13 +50,17 @@
 </head>
 <body>
 @php
-    $money = fn ($value) => '$ '.number_format((float) $value, 2, ',', '.');
+    $currency = ($arca['currency'] ?? 'PES') === 'DOL' ? 'DOL' : 'PES';
+    $money = fn ($value) => ($currency === 'DOL' ? 'US$ ' : '$ ').number_format((float) $value, 2, ',', '.');
     $date = fn ($value) => $value ? \Illuminate\Support\Carbon::parse($value)->format('d/m/Y') : null;
     $customer = $payload['customer'];
 @endphp
 <div class="document">
     <div class="title">FACTURA ELECTRÓNICA</div>
-    <div class="copy">ORIGINAL</div>
+    <div class="copy">ORIGINAL — Moneda: {{ $currency === 'DOL' ? 'Dólares estadounidenses (USD)' : 'Pesos argentinos (ARS)' }}</div>
+    @if($currency === 'DOL')
+        <div class="copy">Cotización ARCA: 1 USD = $ {{ number_format((float) ($arca['currency_rate'] ?? 0), 6, ',', '.') }} ARS</div>
+    @endif
 
     <table class="header box">
         <tr>
@@ -122,7 +126,7 @@
             <td class="totals-box">
                 <table>
                     <tr><td>Subtotal:</td><td class="right">{{ $money($arca['total']) }}</td></tr>
-                    <tr><td>Importe Otros Tributos:</td><td class="right">$ 0,00</td></tr>
+                    <tr><td>Importe Otros Tributos:</td><td class="right">{{ $money(0) }}</td></tr>
                     <tr class="total-row"><td>Importe Total:</td><td class="right"><strong>{{ $money($arca['total']) }}</strong></td></tr>
                 </table>
             </td>
