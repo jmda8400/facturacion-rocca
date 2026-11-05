@@ -155,6 +155,11 @@ class IssueInvoice implements ShouldQueue
     {
         $expected = $arca->expectedAmounts($invoice->request_payload);
         $customer = $invoice->request_payload['customer'];
+        $expectedCurrency = ($invoice->request_payload['currency'] ?? 'ARS') === 'USD' ? 'DOL' : 'PES';
+        $actualCurrency = (string) ($authorization['currency'] ?? 'PES');
+        $rate = (float) ($authorization['currency_rate'] ?? 0);
+        $currencyMatches = $actualCurrency === $expectedCurrency
+            && ($expectedCurrency === 'DOL' ? $rate > 0 : (! isset($authorization['currency_rate']) || abs($rate - 1.0) < 0.000001));
         $matches = (int) $authorization['number'] === (int) $invoice->voucher_number
             && (int) $authorization['type'] === $arca->voucherType($invoice->invoice_type)
             && (int) $authorization['sales_point'] === (int) $invoice->profile->sales_point
@@ -165,8 +170,7 @@ class IssueInvoice implements ShouldQueue
             && (! isset($authorization['service_from']) || $authorization['service_from'] === ($invoice->request_payload['service_from'] ?? null))
             && (! isset($authorization['service_to']) || $authorization['service_to'] === ($invoice->request_payload['service_to'] ?? null))
             && (! isset($authorization['payment_due_date']) || $authorization['payment_due_date'] === ($invoice->request_payload['payment_due_date'] ?? null))
-            && (! isset($authorization['currency']) || $authorization['currency'] === 'PES')
-            && (! isset($authorization['currency_rate']) || abs((float) $authorization['currency_rate'] - 1.0) < 0.000001)
+            && $currencyMatches
             && abs((float) $authorization['total'] - $expected['total']) < 0.01
             && abs((float) $authorization['net'] - $expected['net']) < 0.01
             && abs((float) $authorization['vat'] - $expected['vat']) < 0.01;
@@ -179,6 +183,8 @@ class IssueInvoice implements ShouldQueue
     {
         $invoice->update([
             'voucher_date' => $authorization['date'],
+            'currency_code' => $authorization['currency'] ?? 'PES',
+            'currency_rate' => $authorization['currency_rate'] ?? 1.0,
             'cae' => $authorization['cae'],
             'cae_expires_at' => $authorization['cae_expires_at'],
             'status' => 'authorized',
@@ -190,7 +196,25 @@ class IssueInvoice implements ShouldQueue
     {
         $amounts = $arca->expectedAmounts($invoice->request_payload);
 
+        $currency = $invoice->currency_code
+            ?: (($invoice->request_payload['currency'] ?? 'ARS') === 'USD' ? 'DOL' : 'PES');
+        if ($currency === 'DOL' && (float) $invoice->currency_rate <= 0) {
+            $confirmed = $arca->consult(
+                $invoice->profile,
+                $arca->voucherType($invoice->invoice_type),
+                (int) $invoice->voucher_number
+            );
+            if (! $confirmed) {
+                throw new RuntimeException('No se pudo recuperar la cotización USD de ARCA.');
+            }
+            $this->assertMatches($invoice, $confirmed, $arca);
+            $this->persistAuthorization($invoice, $confirmed);
+            $invoice->refresh();
+        }
+
         return $amounts + [
+            'currency' => $currency,
+            'currency_rate' => $currency === 'DOL' ? (float) $invoice->currency_rate : 1.0,
             'type' => $arca->voucherType($invoice->invoice_type),
             'sales_point' => (int) $invoice->profile->sales_point,
             'number' => (int) $invoice->voucher_number,
