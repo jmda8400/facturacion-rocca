@@ -65,6 +65,7 @@ class ArcaService
         $type = $this->voucherType($data['invoice_type']);
         $amounts = $this->amounts($data);
         $date = CarbonImmutable::now('America/Argentina/Buenos_Aires')->format('Ymd');
+        $currency = ($data['currency'] ?? 'ARS') === 'USD' ? 'DOL' : 'PES';
         $detail = [
             'Concepto' => (int) $data['concept'],
             'DocTipo' => (int) $data['customer']['document_type'],
@@ -79,10 +80,16 @@ class ArcaService
             'ImpOpEx' => 0,
             'ImpTrib' => 0,
             'ImpIVA' => $amounts['vat'],
-            'MonId' => 'PES',
-            'MonCotiz' => 1,
+            'MonId' => $currency,
             'Iva' => ['AlicIva' => [['Id' => 5, 'BaseImp' => $amounts['net'], 'Importe' => $amounts['vat']]]],
         ];
+        if ($currency === 'DOL') {
+            // RG 5616/2024: paid in the same foreign currency.
+            // ARCA determines the official exchange rate.
+            $detail['CanMisMonExt'] = 'S';
+        } else {
+            $detail['MonCotiz'] = 1;
+        }
         if (in_array((int) $data['concept'], [2, 3], true)) {
             $detail += [
                 'FchServDesde' => str_replace('-', '', $data['service_from']),
@@ -101,6 +108,24 @@ class ArcaService
         }
         if (! $approved || ($approved->Resultado ?? null) !== 'A') {
             throw new RuntimeException('ARCA rechazó el comprobante: '.json_encode($result?->Errors ?? $approved?->Observaciones, JSON_UNESCAPED_UNICODE));
+        }
+
+        if ($currency === 'DOL') {
+            // Read back the authorized amount/rate; never invent a cotización.
+            // If ARCA is temporarily unable to consult, the reserved number
+            // will be reconciled safely on retry by IssueInvoice.
+            $existing = $this->consult($profile, $type, $number);
+            if (
+                ! $existing ||
+                $existing['currency'] !== 'DOL' ||
+                $existing['currency_rate'] <= 0 ||
+                $existing['cae'] !== (string) $approved->CAE
+            ) {
+                throw new RuntimeException(
+                    'ARCA autorizó USD pero aún no devolvió una cotización verificable.'
+                );
+            }
+            return $existing + $this->fiscalContract($data);
         }
 
         return $this->authorization($type, $number, $date, $amounts, (string) $approved->CAE, (string) $approved->CAEFchVto, (int) $data['customer']['document_type'], (int) $data['customer']['document_number'], (int) $profile->sales_point) + $this->fiscalContract($data);
