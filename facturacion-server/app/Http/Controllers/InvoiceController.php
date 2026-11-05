@@ -21,17 +21,18 @@ class InvoiceController
             ['required' => 'El campo :attribute es obligatorio.', 'string' => 'El campo :attribute debe ser texto.', 'array' => 'El campo :attribute debe ser una lista.', 'integer' => 'El campo :attribute debe ser un número entero.', 'numeric' => 'El campo :attribute debe ser un número.', 'email' => 'El campo :attribute debe ser una dirección de correo válida.', 'in' => 'El valor seleccionado para :attribute no es válido.', 'max' => 'El campo :attribute supera el máximo permitido.', 'min' => 'El campo :attribute no alcanza el mínimo permitido.', 'gt' => 'El campo :attribute debe ser mayor que :value.'],
             ['external_reference' => 'referencia externa', 'invoice_type' => 'tipo de factura', 'concept' => 'concepto', 'service_from' => 'fecha de inicio del servicio', 'service_to' => 'fecha de fin del servicio', 'payment_due_date' => 'fecha de vencimiento de pago', 'customer' => 'cliente', 'customer.name' => 'nombre del cliente', 'customer.address' => 'dirección del cliente', 'customer.vat_condition' => 'condición frente al IVA del cliente', 'customer.vat_condition_id' => 'identificador de condición IVA del cliente', 'customer.document_type' => 'tipo de documento del cliente', 'customer.document_number' => 'número de documento del cliente', 'items' => 'ítems', 'items.*.description' => 'descripción del ítem', 'items.*.quantity' => 'cantidad del ítem', 'items.*.unit_price' => 'precio unitario del ítem', 'total' => 'total', 'email_to' => 'correo electrónico', 'profile' => 'perfil']
         );
-        // Legacy integrations stay in pesos unless currency is explicit.
-        $d['currency'] = $d['currency'] ?? 'ARS';
-        $d['same_currency_payment'] = (bool) ($d['same_currency_payment'] ?? false);
+        // Keep legacy ARS payloads unchanged so their existing idempotency
+        // fingerprints still match after deploying the USD feature.
+        $currency = $d['currency'] ?? 'ARS';
+        $sameCurrencyPayment = (bool) ($d['same_currency_payment'] ?? false);
         abort_if(
-            $d['currency'] === 'USD' &&
-            ($d['invoice_type'] !== 'B' || ! $d['same_currency_payment']),
+            $currency === 'USD' &&
+            ($d['invoice_type'] !== 'B' || ! $sameCurrencyPayment),
             422,
             'La facturación USD está habilitada sólo para Factura B abonada en USD.'
         );
         abort_if(
-            $d['currency'] === 'ARS' && $d['same_currency_payment'],
+            $currency === 'ARS' && $sameCurrencyPayment,
             422,
             'same_currency_payment sólo corresponde a operaciones en moneda extranjera.'
         );
