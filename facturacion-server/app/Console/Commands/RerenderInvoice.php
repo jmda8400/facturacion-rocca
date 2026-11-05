@@ -30,7 +30,20 @@ class RerenderInvoice extends Command
         }
 
         $amounts = $arca->expectedAmounts($invoice->request_payload);
+        $isUsd = ($invoice->request_payload['currency'] ?? 'ARS') === 'USD';
+
+        // A re-render must never change the fiscal currency or invent a rate.
+        if ($isUsd && (
+            $invoice->currency_code !== 'DOL' ||
+            (float) $invoice->currency_rate <= 0
+        )) {
+            $this->error('No se puede regenerar la factura USD sin la cotización autorizada de ARCA.');
+            return self::FAILURE;
+        }
+
         $authorization = $amounts + [
+            'currency' => $isUsd ? 'DOL' : 'PES',
+            'currency_rate' => $isUsd ? (float) $invoice->currency_rate : 1.0,
             'type' => $arca->voucherType($invoice->invoice_type),
             'number' => (int) $invoice->voucher_number,
             'date' => ($invoice->voucher_date ?? $invoice->created_at)->format('Y-m-d'),

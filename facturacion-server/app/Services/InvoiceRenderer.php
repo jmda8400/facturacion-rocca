@@ -12,7 +12,7 @@ class InvoiceRenderer
     public function render(Invoice $invoice, array $arca): string
     {
         $payload = $invoice->request_payload;
-        $qr = (new ArcaQrService)->generateDataUri((new ArcaQrService)->buildPayload($arca['date'], $invoice->profile->cuit, $invoice->profile->sales_point, $arca['type'], $arca['number'], $arca['total'], 'PES', 1.0, 'E', $arca['cae'], (int) $payload['customer']['document_type'], (int) $payload['customer']['document_number']));
+        $qr = (new ArcaQrService)->generateDataUri((new ArcaQrService)->buildPayload($arca['date'], $invoice->profile->cuit, $invoice->profile->sales_point, $arca['type'], $arca['number'], $arca['total'], (string) ($arca['currency'] ?? 'PES'), (float) ($arca['currency_rate'] ?? 1), 'E', $arca['cae'], (int) $payload['customer']['document_type'], (int) $payload['customer']['document_number']));
         $html = view('invoices.pdf', compact('invoice', 'payload', 'arca', 'qr'))->render();
         $options = new Options;
         $options->set('isRemoteEnabled', false);

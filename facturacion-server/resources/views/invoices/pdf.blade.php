@@ -30,9 +30,8 @@
         .items th { padding: 6px 5px; border: 1px solid #777; background: #eee; text-align: center; }
         .items td { padding: 6px 5px; border-right: 1px solid #999; border-left: 1px solid #999; }
         .items tbody tr:last-child td { border-bottom: 1px solid #777; }
-        .description { width: 55%; }
-        .quantity { width: 12%; text-align: right; }
-        .amount { width: 16.5%; text-align: right; white-space: nowrap; }
+        .description { width: 60%; }
+        .amount { width: 20%; text-align: right; white-space: nowrap; }
         .totals { margin-top: 7px; }
         .totals td { padding: 4px 6px; }
         .vat { width: 57%; padding-top: 22px !important; font-weight: bold; }
@@ -50,13 +49,17 @@
 </head>
 <body>
 @php
-    $money = fn ($value) => '$ '.number_format((float) $value, 2, ',', '.');
+    $currency = ($arca['currency'] ?? 'PES') === 'DOL' ? 'DOL' : 'PES';
+    $money = fn ($value) => ($currency === 'DOL' ? 'US$ ' : '$ ').number_format((float) $value, 2, ',', '.');
     $date = fn ($value) => $value ? \Illuminate\Support\Carbon::parse($value)->format('d/m/Y') : null;
     $customer = $payload['customer'];
 @endphp
 <div class="document">
     <div class="title">FACTURA ELECTRÓNICA</div>
-    <div class="copy">ORIGINAL</div>
+    <div class="copy">ORIGINAL — Moneda: {{ $currency === 'DOL' ? 'Dólares estadounidenses (USD)' : 'Pesos argentinos (ARS)' }}</div>
+    @if($currency === 'DOL')
+        <div class="copy">Cotización ARCA: 1 USD = $ {{ number_format((float) ($arca['currency_rate'] ?? 0), 6, ',', '.') }} ARS</div>
+    @endif
 
     <table class="header box">
         <tr>
@@ -98,7 +101,31 @@
     <div class="section section-title">DATOS DEL CLIENTE</div>
     <table class="customer box">
         <tr>
-            <td><span class="label">Documento:</span> @if(!empty($customer['document_type'])){{ $customer['document_type'] }} @endif{{ $customer['document_number'] ?? '' }}</td>
+            <td>
+                <span class="label">Documento:</span>
+                @php
+                    $docType = (int) ($customer['document_type'] ?? 0);
+                    $docNumber = preg_replace('/\D+/', '', (string) ($customer['document_number'] ?? ''));
+
+                    if ($docType === 80) {
+                        if (strlen($docNumber) === 11) {
+                            $docText = 'CUIT '
+                                . substr($docNumber, 0, 2) . '-'
+                                . substr($docNumber, 2, 8) . '-'
+                                . substr($docNumber, 10, 1);
+                        } else {
+                            $docText = 'CUIT ' . $docNumber;
+                        }
+                    } elseif ($docType === 96) {
+                        $docText = 'DNI ' . $docNumber;
+                    } elseif ($docType === 99 && (!$docNumber || $docNumber === '0')) {
+                        $docText = 'Consumidor Final';
+                    } else {
+                        $docText = trim(($docType ? $docType . ' ' : '') . $docNumber);
+                    }
+                @endphp
+                {{ $docText }}
+            </td>
             <td class="wide"><span class="label">Apellido y Nombre / Razón Social:</span> {{ $customer['name'] ?? '' }}</td>
         </tr>
         <tr>
@@ -108,11 +135,29 @@
     </table>
 
     <table class="items section">
-        <thead><tr><th class="description">Producto / Servicio</th><th class="quantity">Cantidad</th><th class="amount">Precio Unit.</th><th class="amount">Subtotal</th></tr></thead>
+        <thead>
+            <tr>
+                <th class="description">Producto / Servicio</th>
+                <th class="amount">Precio Unit.</th>
+                <th class="amount">Subtotal</th>
+            </tr>
+        </thead>
         <tbody>
-        @foreach($payload['items'] as $item)
-            <tr><td>{{ $item['description'] }}</td><td class="quantity">{{ number_format((float) $item['quantity'], 2, ',', '.') }}</td><td class="amount">{{ $money($item['unit_price']) }}</td><td class="amount">{{ $money($item['quantity'] * $item['unit_price']) }}</td></tr>
-        @endforeach
+        @if($invoice->profile->slug === 'sistema-de-comandas-pv8')
+            <tr>
+                <td>Contratacion de Servicios</td>
+                <td class="amount">{{ $money($arca['total']) }}</td>
+                <td class="amount">{{ $money($arca['total']) }}</td>
+            </tr>
+        @else
+            @foreach($payload['items'] as $item)
+                <tr>
+                    <td>{{ $item['description'] }}</td>
+                    <td class="amount">{{ $money($item['unit_price']) }}</td>
+                    <td class="amount">{{ $money($item['quantity'] * $item['unit_price']) }}</td>
+                </tr>
+            @endforeach
+        @endif
         </tbody>
     </table>
 
@@ -122,8 +167,14 @@
             <td class="totals-box">
                 <table>
                     <tr><td>Subtotal:</td><td class="right">{{ $money($arca['total']) }}</td></tr>
-                    <tr><td>Importe Otros Tributos:</td><td class="right">$ 0,00</td></tr>
+                    <tr><td>Importe Otros Tributos:</td><td class="right">{{ $money(0) }}</td></tr>
                     <tr class="total-row"><td>Importe Total:</td><td class="right"><strong>{{ $money($arca['total']) }}</strong></td></tr>
+                    @if($currency === 'DOL')
+                    <tr>
+                        <td style="font-size: 9px;">EQUIVALENTE EN PESOS:</td>
+                        <td class="right"><strong>ARS $ {{ number_format((float) $arca['total'] * (float) ($arca['currency_rate'] ?? 0), 2, ',', '.') }}</strong></td>
+                    </tr>
+                    @endif
                 </table>
             </td>
         </tr>

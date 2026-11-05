@@ -203,6 +203,51 @@ class FiscalIssuanceTest extends TestCase
         $this->assertSame('review_required', $invoice->fresh()->status);
     }
 
+    public function test_usd_invoice_reconciliation_stores_arca_currency_rate(): void
+    {
+        $payload = array_merge($this->invoicePayload(), [
+            'currency' => 'USD',
+            'same_currency_payment' => true,
+        ]);
+        $invoice = $this->invoice([
+            'voucher_number' => 82,
+            'status' => 'fiscal_pending',
+            'request_payload' => $payload,
+        ]);
+        $arca = $this->arca();
+        $authorization = $this->authorization(82) + [
+            'currency' => 'DOL',
+            'currency_rate' => 1450.123456,
+        ];
+        $arca->shouldReceive('consult')->once()->andReturn($authorization);
+        $this->run($invoice, $arca);
+        $this->assertSame('completed', $invoice->fresh()->status);
+        $this->assertSame('DOL', $invoice->fresh()->currency_code);
+        $this->assertSame('1450.123456', $invoice->fresh()->currency_rate);
+    }
+
+    public function test_usd_invoice_reconciliation_rejects_a_pesos_comprobante(): void
+    {
+        $payload = array_merge($this->invoicePayload(), [
+            'currency' => 'USD',
+            'same_currency_payment' => true,
+        ]);
+        $invoice = $this->invoice([
+            'voucher_number' => 83,
+            'status' => 'fiscal_pending',
+            'request_payload' => $payload,
+        ]);
+        $arca = $this->arca();
+        $authorization = $this->authorization(83) + [
+            'currency' => 'PES',
+            'currency_rate' => 1.0,
+        ];
+        $arca->shouldReceive('consult')->once()->andReturn($authorization);
+        $this->run($invoice, $arca);
+        $this->assertSame('review_required', $invoice->fresh()->status);
+        $this->assertNull($invoice->fresh()->cae);
+    }
+
     private function run(Invoice $invoice, ArcaService $arca, ?InvoiceRenderer $renderer = null): void
     {
         $renderer ??= tap(Mockery::mock(InvoiceRenderer::class), fn ($mock) => $mock->shouldReceive('render')->andReturn('invoices/test.pdf'));
